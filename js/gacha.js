@@ -30,6 +30,8 @@
   var RARE = { 1: { name: "ノーマル", star: "★", color: "#7fb3ff", cap: "#8fd0ff" }, 2: { name: "レア", star: "★★", color: "#ffb31a", cap: "#ffd34d" },
     3: { name: "スーパーレア", star: "★★★", color: "#b46bff", cap: "#c98bff" }, 4: { name: "ウルトラレア", star: "★★★★", color: "#ff4fa0", cap: "rainbow" } };
   var WEIGHT = { 1: 66, 2: 26, 3: 7, 4: 1 };
+  // がったい: かぶった なかま(のこりの 1ぴきは かならず のこす)を あつめて 1つ上の ランクに
+  var FUSE = { 1: 5, 2: 10, 3: 15 };
   var PITY = 30; // 30回 まわしても ★★★ が でなければ、つぎは かならず ★★★いじょう
   var STAGE = [0, 5, 15]; // ごはんの かず: ベビー / こども / おとな
   var MAXF = 30;
@@ -112,6 +114,44 @@
   function stageOf(id) {
     var o = owned(id), f = o ? o.food : 0;
     return f >= STAGE[2] ? 2 : f >= STAGE[1] ? 1 : 0;
+  }
+  function count(id) { var o = owned(id); return o ? (o.count || 1 + (o.dup || 0)) : 0; }
+  function spare(tier) { return LIST.reduce(function (n, d) { return n + (d.r === tier ? Math.max(0, count(d.id) - 1) : 0); }, 0); }
+  /* がったい: tier の かぶりを FUSE[tier] ぴき つかって、tier+1 の なかまを 1ぴき */
+  function fuse(tier) {
+    var need = FUSE[tier];
+    if (!need || spare(tier) < need) return;
+    var left = need;
+    while (left > 0) {
+      var mine = LIST.filter(function (d) { return d.r === tier && count(d.id) > 1; }).sort(function (a, b) { return count(b.id) - count(a.id); });
+      var o = owned(mine[0].id); o.count = count(mine[0].id) - 1; left--;
+    }
+    var pool = LIST.filter(function (d) { return d.r === tier + 1; }), d = pool[Math.floor(Math.random() * pool.length)];
+    var was = owned(d.id);
+    if (was) { was.count = count(d.id) + 1; was.food = Math.min(MAXF, was.food + 3); }
+    else st().gacha.owned[d.id] = { food: 0, got: Date.now(), dup: 0, count: 1 };
+    A.save();
+    // えんしゅつ
+    var orbs = h("div", { class: "fuse-orbs" });
+    for (var i = 0; i < Math.min(need, 15); i++) orbs.appendChild(h("span", { class: "fuse-orb r" + tier, style: { "--a": (i / Math.min(need, 15)) * 360 + "deg", "animation-delay": i * 0.05 + "s" } }));
+    C().view(h("section", { class: "gacha-stage fuse-stage" }, h("h2", null, "がったい!"), orbs, h("p", { class: "note center" }, RARE[tier].star + " を " + need + "ひき あつめて…")));
+    A.sfx("pop"); A.speak("がったい!");
+    setTimeout(function () { A.sfx("levelup"); reveal(d, !!was, "がったい"); }, 1700);
+  }
+  function fusePanel(after) {
+    var rows = [1, 2, 3].map(function (t) {
+      var have = spare(t), need = FUSE[t], ok = have >= need;
+      return h("div", { class: "fuse-row" + (ok ? " ok" : "") },
+        h("div", { class: "fuse-text" }, h("b", { style: { color: RARE[t].color } }, RARE[t].star), " かぶり ", h("b", null, have + " / " + need),
+          h("span", null, " → "), h("b", { style: { color: RARE[t + 1].color } }, RARE[t + 1].star + " 1ぴき")),
+        h("div", { class: "growbar small" }, h("div", { class: "growfill", style: { width: Math.min(100, Math.round(have / need * 100)) + "%" } })),
+        ok ? h("button", { class: "btn small good pulse", onclick: function () { A.sfx("tap"); fuse(t); } }, "✨ がったい!") : null);
+    });
+    return h("section", { class: "fuse-panel" },
+      h("div", { class: "mission-title" }, "✨ がったい ",
+        h("button", { class: "btn-ghost icon say", "aria-label": "よむ", onclick: function () { A.speak("かぶった なかまを あつめると、1つ うえの ランクの なかまに がったい できるよ。ノーマル " + FUSE[1] + "ひきで レア、レア " + FUSE[2] + "ひきで スーパーレア、スーパーレア " + FUSE[3] + "ひきで ウルトラレア。"); } }, "🔊")),
+      h("p", { class: "muted" }, "かぶった なかまを あつめると、1つ上の ランクに がったい できるよ!(どの子も 1ぴきは のこるよ)"),
+      rows);
   }
   function ownedList() { return LIST.filter(function (d) { return owned(d.id); }); }
 
@@ -223,6 +263,7 @@
         t ? null : h("p", { class: "note" }, "チケットは まいにちの ログインボーナスと、「きょうの ミッション」を ぜんぶ クリアすると もらえるよ!"),
         h("div", { class: "rates" }, rates),
         h("p", { class: "muted center" }, "★★★は なかなか でないよ。でも " + PITY + "かい まわすと かならず でる!(あと " + Math.max(1, PITY - st().gacha.pity) + "かい)")),
+      fusePanel(),
       h("button", { class: "btn big alt", onclick: function () { A.sfx("tap"); room(); } }, "🐾 ガチャなかまの へやへ"));
     A.speak(t ? "ガチャチケットが " + t + "まい あるよ。まわして みよう!" : "チケットが ないよ。ミッションを クリアしよう!");
   }
@@ -231,8 +272,8 @@
     if (!(s.tickets > 0)) return;
     s.tickets--;
     var d = draw(), was = owned(d.id), rare = RARE[d.r];
-    if (was) { was.food = Math.min(MAXF, was.food + 3); was.dup = (was.dup || 0) + 1; }
-    else s.gacha.owned[d.id] = { food: 0, got: Date.now(), dup: 0 };
+    if (was) { was.food = Math.min(MAXF, was.food + 3); was.dup = (was.dup || 0) + 1; was.count = count(d.id) + 1; }
+    else s.gacha.owned[d.id] = { food: 0, got: Date.now(), dup: 0, count: 1 };
     A.save();
     // えんしゅつ: ハンドルが まわる → カプセルが おちる → タップで ひらく
     var m = machineEl(true);
@@ -250,7 +291,7 @@
     });
     A.speak("ガチャ ガチャ… カプセルを タップして あけよう!");
   }
-  function reveal(d, dup) {
+  function reveal(d, dup, how) {
     var rare = RARE[d.r];
     A.sfx(d.r >= 3 ? "levelup" : "good"); A.confetti(d.r >= 3 ? 44 : 20);
     var card = h("section", { class: "reveal r" + d.r },
@@ -259,7 +300,7 @@
       h("div", { class: "reveal-art pop" }, el(d.id, 0)),
       h("h1", null, d.n),
       h("p", { class: "reveal-talk" }, "「" + d.talk + "」"),
-      h("p", null, dup ? "おなじ なかまが きたよ! " + d.n + "に ごはん +3!" : "あたらしい なかまに なった!"),
+      h("p", null, (how ? "がったいで " : "") + (dup ? "おなじ なかまが きたよ! " + d.n + "に ごはん +3!(×" + count(d.id) + ")" : "あたらしい なかまに なった!")),
       h("div", { class: "choice-col" },
         st().tickets ? h("button", { class: "btn big go", onclick: pull }, "🎰 もう1かい まわす(のこり " + st().tickets + ")") : null,
         h("button", { class: "btn big alt", onclick: function () { room(d.id); } }, "🐾 そだてに いく"),
@@ -298,7 +339,7 @@
       return h("div", { class: "friend r" + d.r + (isP ? " partner" : "") },
         h("div", { class: "friend-rare", style: { color: rare.color } }, rare.star),
         h("div", { class: "friend-art" }, art),
-        h("b", null, d.n), h("small", null, STAGE_NAME[sg] + (o.food >= MAXF ? "・なかよしMAX" : "")),
+        h("b", null, d.n, h("span", { class: "friend-count" }, " ×" + count(d.id))), h("small", null, STAGE_NAME[sg] + (o.food >= MAXF ? "・なかよしMAX" : "")),
         h("div", { class: "growbar small" }, h("div", { class: "growfill", style: { width: (o.food >= MAXF ? 100 : pct) + "%" } })),
         h("small", { class: "muted" }, o.food >= MAXF ? "🍙 " + o.food : sg < 2 ? "つぎの すがたまで 🍙" + (hi - o.food) : "なかよしMAXまで 🍙" + (MAXF - o.food)),
         h("button", { class: "btn small good", disabled: s.bag > 0 && o.food < MAXF ? null : true, onclick: function () {
@@ -320,6 +361,7 @@
       h("div", { class: "room-head" }, h("span", null, "🍙 ごはん × " + (s.bag || 0)), h("span", null, "🎟️ × " + s.tickets)),
       h("p", { class: "note" }, "ごはんを あげると そだつよ。「いっしょに たたかう」に すると、もんだいの バトルに でてくれるよ!"),
       h("div", { class: "friend-grid" }, cards),
+      fusePanel(),
       h("button", { class: "btn big go", onclick: function () { A.sfx("tap"); C().quickStart(); } }, "✏️ もんだいで ごはんを もらう ▶"));
   }
 
@@ -369,7 +411,7 @@
 
   /* ---------- 公開 ---------- */
   A.gacha = {
-    list: LIST, rare: RARE, el: el, svg: svg, stageOf: stageOf, owned: owned, ownedList: ownedList, byId: BY,
+    list: LIST, rare: RARE, count: count, spare: spare, FUSE: FUSE, el: el, svg: svg, stageOf: stageOf, owned: owned, ownedList: ownedList, byId: BY,
     loginCheck: loginCheck, missionCard: missionCard, home: gachaHome, room: room, pull: pull,
     addReview: addReview, clearReview: clearReview, reviewHome: reviewHome, state: st,
     reviewCount: function () { return Object.keys(st().review).length; },
