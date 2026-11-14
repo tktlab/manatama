@@ -238,19 +238,29 @@
   }
   A.canSpeak = function () { return !!window.speechSynthesis && !!window.SpeechSynthesisUtterance; };
   var keep = null; // 読み上げ中の utterance を保持(消えて止まるのを防ぐ)
-  function say(text, lang, rate, pitch, voice) {
+  function say(text, lang, rate, pitch, voice) { return sayParts([{ t: text, lang: lang, rate: rate, pitch: pitch, voice: voice }]); }
+  function enVoice() {
+    var vs = speechSynthesis.getVoices() || [];
+    for (var i = 0; i < vs.length; i++) { if (/^en/i.test(vs[i].lang)) return vs[i]; }
+    return null;
+  }
+  /* 日本語と英語がまざった文は、英語の部分だけ 英語の声で 読む */
+  function sayParts(parts) {
     var ss = window.speechSynthesis;
     try {
       if (ss.speaking || ss.pending) ss.cancel();
       if (ss.paused) ss.resume();
-      var u = new SpeechSynthesisUtterance(text);
-      u.lang = lang; u.rate = rate;
-      if (pitch) u.pitch = pitch;
-      if (voice) u.voice = voice;
-      keep = u;
-      u.onend = u.onerror = function () { if (keep === u) keep = null; };
-      // cancel 直後の speak は Android で無音になることがあるので、少し待つ
-      setTimeout(function () { try { ss.speak(u); if (ss.paused) ss.resume(); } catch (e) {} }, 80);
+      var us = parts.filter(function (p) { return p.t && p.t.trim(); }).map(function (p) {
+        var u = new SpeechSynthesisUtterance(p.t);
+        u.lang = p.lang; u.rate = p.rate;
+        if (p.pitch) u.pitch = p.pitch;
+        if (p.voice) u.voice = p.voice;
+        return u;
+      });
+      keep = us;
+      var last = us[us.length - 1];
+      if (last) last.onend = last.onerror = function () { if (keep === us) keep = null; };
+      setTimeout(function () { try { us.forEach(function (u) { ss.speak(u); }); if (ss.paused) ss.resume(); } catch (e) {} }, 80);
       return true;
     } catch (e) { return false; }
   }
@@ -259,7 +269,16 @@
     if (!A.S.settings.voice && !force) return false;
     var t = A.reading(text);
     if (!t) return false;
-    return say(t, "ja-JP", 0.92 * (A.S.settings.rate || 1), 1.1, jaVoice());
+    var r = A.S.settings.rate || 1, parts = [], last = 0, m;
+    var EN = /[A-Za-z][A-Za-z'’]*(?:[ ,.!?-]+[A-Za-z][A-Za-z'’]*)*[.!?]?/g;
+    while ((m = EN.exec(t))) {
+      if (m[0].replace(/[^A-Za-z]/g, "").length < 2) continue;
+      if (m.index > last) parts.push({ t: t.slice(last, m.index), lang: "ja-JP", rate: 0.92 * r, pitch: 1.1, voice: jaVoice() });
+      parts.push({ t: m[0], lang: "en-US", rate: 0.8 * r, voice: enVoice() });
+      last = m.index + m[0].length;
+    }
+    if (last < t.length) parts.push({ t: t.slice(last), lang: "ja-JP", rate: 0.92 * r, pitch: 1.1, voice: jaVoice() });
+    return sayParts(parts);
   };
   A.speakEn = function (text) {
     if (!A.canSpeak()) return false;

@@ -158,7 +158,7 @@
     gen: function (r) {
       var n = r.int(1050, 9949), k = r.pick([100, 1000]);
       var ans = Math.round(n / k) * k, lo = Math.floor(n / k) * k, hi = lo + k;
-      return [n + " を " + (k === 100 ? "百" : "千") + "の位までの がい数に すると?", [ans, ans === lo ? hi : lo, n - n % 10, ans + k], (k === 100 ? "十" : "百") + "の位の 数字を 見よう。", (k === 100 ? "十" : "百") + "の位は " + Math.floor(n / (k / 10)) % 10 + "。" + ans + "。"];
+      return [n + " を " + (k === 100 ? "百" : "千") + "の位までの がい数に すると?", [ans, ans === lo ? hi : lo, n - n % 10, ans + k, ans - k, n - n % (k / 10)], (k === 100 ? "十" : "百") + "の位の 数字を 見よう。", (k === 100 ? "十" : "百") + "の位は " + Math.floor(n / (k / 10)) % 10 + "。" + ans + "。"];
     } });
 
   S({ unit: "sa4-07", sub: "算数", id: "s4-order", name: "計算のきまり", title: "計算の じゅんじょ",
@@ -208,8 +208,10 @@
     checks: [["0.4×3は?", ["1.2", "12", "0.12"], "4×3＝12。0.1が 12こで 1.2。"], ["6.3÷3は?", ["2.1", "21", "0.21"], "63÷3＝21。2.1。"]],
     gen: function (r) {
       var a = r.int(11, 99), b = r.int(2, 9);
+      if (a % 10 === 0) return null;
       if (r() < 0.5) return [dec(a / 10) + "×" + b + "＝?", [dec(a * b / 10), String(a * b), dec(a * b / 100), dec(a * b / 10 + 1)], a + "×" + b + " を 計算して、小数点を うとう。", a + "×" + b + "＝" + a * b + " → " + dec(a * b / 10) + "。"];
       var q = r.int(11, 49), x = q * b;
+      if (q % 10 === 0 || x % 10 === 0) return null;
       return [dec(x / 10) + "÷" + b + "＝?", [dec(q / 10), String(q), dec(q / 100), dec(q / 10 + 1)], x + "÷" + b + " を 計算して、小数点を うとう。", x + "÷" + b + "＝" + q + " → " + dec(q / 10) + "。"];
     } });
 

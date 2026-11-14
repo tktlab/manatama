@@ -10,7 +10,7 @@
 
   var FOUNDATION = { 算数: "s1-count", 国語: "k1-hira" };
 
-  function pieces(c, ex) {
+  function pieces(c, ex, prob) {
     var n = c.examples.length || 1;
     var i = ex % n;
     var list = [
@@ -20,6 +20,15 @@
     c.steps.forEach(function (s, k) {
       list.push({ head: "ひとつずつ " + (k + 1), text: s, visual: c.visuals ? c.visuals[i] || c.visuals[0] : null });
     });
+    // さいしょの説明(もとの問題の説明)では、さいごに「この もんだいでは」で その問題の とき方の ヒントを 見せる
+    if (prob && prob.hints && prob.hints[0]) list.push({ head: "この もんだいの ヒント", text: prob.hints[0], visual: prob.visual || null, quote: prob.question });
+    // さいごに、この もんだいの とき方を こたえまで いっしょに 見る(知らないと とけない 問題も、ここで わかるように)
+    if (prob && prob.explanation) {
+      var ex = prob.explanation, ans = prob.answer;
+      // 説明に こたえが 出てこない ときは、さいしょに こたえを はっきり 言う
+      if (A.plain(ex).replace(/\s/g, "").indexOf(A.plain(ans).replace(/\s/g, "")) < 0) ex = "こたえは「" + ans + "」。 " + ex;
+      list.push({ head: "こたえまで いっしょに", text: ex, visual: prob.visual || null, quote: prob.question });
+    }
     return list;
   }
 
@@ -155,7 +164,7 @@
         return;
       }
 
-      var list = pieces(c, f.ex);
+      var list = pieces(c, f.ex, frames.length === 1 ? problem : null);
       if (f.piece >= list.length) f.piece = list.length - 1;
       var p = list[f.piece];
       var last = f.piece === list.length - 1;
@@ -191,6 +200,7 @@
       body = h("section", { class: "card" },
         h("div", { class: "concept-title" }, c.title),
         guide(p.head),
+        p.quote ? h("div", { class: "tutor-quote" }, "もんだい: ", p.quote) : null,
         h("p", { class: "big-text" }, p.text),
         vis, dots, actions);
       root.appendChild(top); root.appendChild(ladder()); root.appendChild(body);
