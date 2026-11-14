@@ -139,18 +139,52 @@
   }
   function showFused(list, after) {
     if (!list.length) return after && after();
-    var f = list.shift(), d = f.d;
-    var text = RARE[f.from].star + RARE[f.from].name + "が " + FUSE[f.from] + "ひき あつまったので、" + RARE[d.r].star + RARE[d.r].name + "の " + d.n + (f.dup ? "が もう1ぴき きたよ!" : "が なかまに なったよ!");
-    A.sfx("levelup"); A.confetti(36);
-    var box = h("div", { class: "overlay", role: "dialog", "aria-modal": "true" },
-      h("div", { class: "overlay-card fuse-card r" + d.r },
-        h("div", { class: "fuse-pico" }, "ピコーン!"),
-        h("div", { class: "overlay-face pop" }, el(d.id)),
-        h("h2", { style: { color: RARE[d.r].color } }, RARE[d.r].star + " " + d.n),
-        h("p", null, text),
-        h("button", { class: "btn big good", onclick: function () { if (box.parentNode) box.parentNode.removeChild(box); showFused(list, after); } }, "やったー!")));
-    document.body.appendChild(box);
-    A.speak("ピコーン! " + text);
+    var f = list.shift(), d = f.d, need = FUSE[f.from];
+    var text = RARE[f.from].star + RARE[f.from].name + "が " + need + "ひき あつまったので、" + RARE[d.r].star + RARE[d.r].name + "の " + d.n + (f.dup ? "が もう1ぴき きたよ!" : "が なかまに なったよ!");
+    var sc = fxScreen("gacha-fx fuse-fx");
+    // ① あつまった なかまが ぐるぐる まわって あつまる
+    var mates = LIST.filter(function (x) { return x.r === f.from && owned(x.id); });
+    var ring = h("div", { class: "fuse-ring" });
+    for (var i = 0; i < need && i < 15; i++) {
+      var mt = mates[i % mates.length];
+      ring.appendChild(h("div", { class: "fuse-mate", style: { "--a": (i / Math.min(need, 15)) * 360 + "deg", "animation-delay": (i * 0.04) + "s" } }, el(mt.id, 0)));
+    }
+    var core = h("div", { class: "fuse-core" });
+    var txt = h("div", { class: "fx-text" }, RARE[f.from].star + " が " + need + "ひき あつまった…!");
+    sc.appendChild(h("div", { class: "fx-center" }, h("div", { class: "fuse-pico big" }, "ピコーン!"), h("div", { class: "fuse-wrap" }, ring, core), txt));
+    A.sfx("pico"); setTimeout(function () { A.sfx("rise"); txt.textContent = "がったい…!!"; }, 500);
+    A.speak("ピコーン! がったい!");
+    setTimeout(function () { core.classList.add("charge"); A.sfx("drum"); }, 1200);
+    setTimeout(function () {
+      A.sfx("boom"); flash(sc, "#fff");
+      A.clear(sc); sc.className = "fx-screen gacha-fx glow-r" + Math.min(d.r, 3) + (d.r >= 4 ? " rainbow-bg" : "");
+      sc.appendChild(rays(d.r));
+      sc.appendChild(h("div", { class: "fx-center" }, banner("がったい! " + RARE[d.r].star + " " + RARE[d.r].name, d.r), h("div", { class: "fx-art" }, el(d.id)),
+        h("div", { class: "fx-name" }, d.n), h("div", { class: "fx-sub" }, text)));
+      stars(sc, 44, d.r); A.sfx("fanfare"); A.confetti(60);
+      setTimeout(function () { stars(sc, 30, d.r); A.sfx("sparkle"); }, 700);
+      A.speak(text);
+      setTimeout(function () {
+        sc.appendChild(h("button", { class: "btn big good fx-next", onclick: function () { closeFx(sc); showFused(list, after); } }, "やったー!"));
+      }, 1400);
+    }, 2300);
+  }
+  /* そだって すがたが かわった とき */
+  function showGrow(d, stg, after) {
+    var sc = fxScreen("gacha-fx glow-r" + Math.min(d.r, 3));
+    var before = h("div", { class: "fx-art grow-before" }, el(d.id, stg - 1));
+    var txt = h("div", { class: "fx-text" }, "あれ…? " + d.n + "の ようすが…!");
+    sc.appendChild(h("div", { class: "fx-center" }, before, txt));
+    A.sfx("rise"); A.speak("あれ? " + d.n + "の ようすが…");
+    setTimeout(function () {
+      A.sfx("boom"); flash(sc, "#fff"); A.clear(sc);
+      sc.appendChild(rays(d.r));
+      sc.appendChild(h("div", { class: "fx-center" }, banner("せいちょう!", d.r), h("div", { class: "fx-art" }, el(d.id, stg)),
+        h("div", { class: "fx-name" }, d.n), h("div", { class: "fx-sub" }, STAGE_NAME[stg] + "に なったよ!")));
+      stars(sc, 36, d.r); A.sfx("fanfare"); A.confetti(40);
+      A.speak(d.n + "が " + STAGE_NAME[stg] + "に なったよ!");
+      setTimeout(function () { sc.appendChild(h("button", { class: "btn big good fx-next", onclick: function () { closeFx(sc); after && after(); } }, "やったー!")); }, 1200);
+    }, 1600);
   }
   function fuseInfo() {
     var parts = [1, 2, 3].map(function (t) {
@@ -161,6 +195,30 @@
       h("div", { class: "fuse-chips" }, parts));
   }
   function ownedList() { return LIST.filter(function (d) { return owned(d.id); }); }
+
+  /* ================= えんしゅつ(はでに!) ================= */
+  var REDUCED = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function fxScreen(cls) {
+    var sc = h("div", { class: "fx-screen " + (cls || "") });
+    document.body.appendChild(sc);
+    return sc;
+  }
+  function closeFx(sc) { if (sc && sc.parentNode) sc.parentNode.removeChild(sc); }
+  function flash(sc, color) {
+    var f = h("div", { class: "fx-flash", style: { background: color || "#fff" } });
+    sc.appendChild(f); setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); }, 700);
+  }
+  function rays(r) { return h("div", { class: "fx-rays r" + r }); }
+  function stars(sc, n, r) {
+    var em = r >= 4 ? ["🌈", "⭐", "💖", "✨", "👑"] : r >= 3 ? ["💜", "⭐", "✨", "🌟"] : r >= 2 ? ["⭐", "✨", "🌟"] : ["✨", "⭐", "💧"];
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * 6.283, d = 120 + Math.random() * 160;
+      var sp = h("span", { class: "fx-star", style: { "--dx": Math.cos(a) * d + "px", "--dy": Math.sin(a) * d + "px", "animation-delay": Math.random() * 0.25 + "s", "font-size": 18 + Math.random() * 22 + "px" } }, em[i % em.length]);
+      sc.appendChild(sp);
+      setTimeout(function (x) { return function () { if (x.parentNode) x.parentNode.removeChild(x); }; }(sp), 1800);
+    }
+  }
+  function banner(text, r) { return h("div", { class: "fx-banner2 r" + r }, text); }
 
   /* ================= ログインボーナス ================= */
   var LOGIN = [ // 7日で 1しゅう(つづけて ログインしなくても すすむ。休んでも リセットしない)
@@ -177,20 +235,20 @@
     A.save();
     var stamps = LOGIN.map(function (x, i) {
       var done = i < idx, now = i === idx;
-      return h("div", { class: "stamp" + (done ? " done" : "") + (now ? " now" : "") },
+      return h("div", { class: "stamp" + (done ? " done" : "") + (now ? " now hit" : "") },
         h("small", null, (i + 1) + "日め"),
         h("b", null, "🎟️×" + x.t), x.f ? h("small", null, "🍙×" + x.f) : null,
-        done ? h("span", { class: "stamp-ok" }, "✔") : null);
+        done ? h("span", { class: "stamp-ok" }, "✔") : now ? h("span", { class: "stamp-new" }, "GET!") : null);
     });
     var box = h("div", { class: "overlay", role: "dialog", "aria-modal": "true" },
       h("div", { class: "overlay-card login-card" },
         h("h2", null, "ログインボーナス!"),
         h("p", null, "きょうも きてくれて ありがとう!"),
         h("div", { class: "stamps" }, stamps),
-        h("div", { class: "login-get pop" }, "🎟️ ガチャチケット ×" + rw.t + (rw.f ? "   🍙 ごはん ×" + rw.f : "")),
+        h("div", { class: "login-get" }, h("span", { class: "ticket-fly" }, "🎟️"), " ガチャチケット ×" + rw.t + (rw.f ? "   🍙 ごはん ×" + rw.f : "")),
         h("button", { class: "btn big good", onclick: function () { if (box.parentNode) box.parentNode.removeChild(box); after(); } }, "もらう!")));
     document.body.appendChild(box);
-    A.sfx("levelup"); A.confetti(24);
+    A.sfx("drum"); setTimeout(function () { A.sfx("pico"); }, 1100); setTimeout(function () { A.sfx("fanfare"); A.confetti(30); }, 1500);
     A.speak("ログインボーナス! ガチャチケットを " + rw.t + "まい ゲット!" + (rw.f ? " ごはんも " + rw.f + "こ!" : ""));
     return true;
   }
@@ -283,25 +341,56 @@
     else s.gacha.owned[d.id] = { food: 0, got: Date.now(), dup: 0, count: 1 };
     A.save();
     var fused = autoFuse();
-    // えんしゅつ: ハンドルが まわる → カプセルが おちる → タップで ひらく
-    var m = machineEl(true);
-    var cap = h("div", { class: "capsule drop r" + d.r, style: { "--cap": rare.cap === "rainbow" ? "#ff8fb8" : rare.cap } }, h("span", { class: "cap-top" }), h("span", { class: "cap-bot" }));
-    var tip = h("p", { class: "note good center" }, "カプセルを タップして あけよう!");
-    C().view(h("section", { class: "gacha-stage" }, m, cap, tip));
-    A.sfx("pop");
-    setTimeout(function () { A.sfx("pop"); }, 350);
-    setTimeout(function () { A.sfx("tap"); if (d.r >= 3) { cap.classList.add("shine"); A.sfx("good"); } }, 900);
-    var opened = false;
-    cap.addEventListener("click", function () {
-      if (opened) return; opened = true;
-      cap.classList.add("open");
-      setTimeout(function () { reveal(d, !!was); if (fused.length) setTimeout(function () { showFused(fused); }, 1400); }, 520);
+    // えんしゅつ: ① ため(ドキドキ) → ② カプセルが おちる → ③ タップで ガタガタ → ④ ピカーッ! と 登場
+    var sc = fxScreen("gacha-fx"), r = d.r;
+    var m = machineEl(true), hint = h("div", { class: "fx-text" }, "ガチャ ガチャ…");
+    var stage = h("div", { class: "fx-center" }, m, hint);
+    sc.appendChild(stage);
+    A.sfx("drum");
+    A.speak("ガチャ ガチャ… ドキドキ");
+    setTimeout(function () { m.classList.add("shake"); A.sfx("rise"); hint.textContent = "ドキドキ…"; }, 900);
+    if (r >= 2) setTimeout(function () { sc.classList.add("glow-r" + Math.min(r, 3)); hint.textContent = r >= 3 ? "!? なにか すごい ことが おこりそう…!" : "おっ…!? ひかってる!"; A.sfx("sparkle"); if (r >= 3) flash(sc, r >= 4 ? "linear-gradient(90deg,#ff5e7e,#ffd23a,#4fd98a,#4aa3ff,#b46bff)" : "#e6d2ff"); }, 1700);
+    if (r >= 4) setTimeout(function () { flash(sc, "#fff"); sc.classList.add("rainbow-bg"); hint.textContent = "!!!! にじいろだ…!!"; A.sfx("rise"); }, 2400);
+    var dropAt = r >= 4 ? 3100 : r >= 3 ? 2500 : 2000;
+    setTimeout(function () {
+      var cap = h("div", { class: "capsule drop r" + r, style: { "--cap": RARE[r].cap === "rainbow" ? "#ff8fb8" : RARE[r].cap } }, h("span", { class: "cap-top" }), h("span", { class: "cap-bot" }), h("span", { class: "cap-glow" }));
+      var tip = h("div", { class: "fx-text tap-me" }, "👆 タップして あけよう!");
+      A.clear(stage); stage.appendChild(cap); stage.appendChild(tip);
+      A.sfx("pop"); setTimeout(function () { A.sfx("pop"); }, 420);
+      var opened = false;
+      cap.addEventListener("click", function () {
+        if (opened) return; opened = true;
+        tip.textContent = r >= 3 ? "パカッ…!?" : "パカッ…";
+        cap.classList.add("rattle"); A.sfx("drum");
+        setTimeout(function () {
+          cap.classList.add("open"); A.sfx("boom"); flash(sc, r >= 4 ? "#fffbe0" : "#fff");
+          setTimeout(function () { burstReveal(sc, d, !!was, fused); }, 260);
+        }, r >= 3 ? 1300 : 800);
+      });
+    }, dropAt);
+  }
+  /* ④ 登場: ひかりの せん・ほし・ファンファーレ。そのあと カードで ボタンを 出す */
+  function burstReveal(sc, d, dup, fused) {
+    var r = d.r, rare = RARE[r];
+    A.clear(sc); sc.className = "fx-screen gacha-fx glow-r" + Math.min(r, 3) + (r >= 4 ? " rainbow-bg" : "");
+    var art = h("div", { class: "fx-art" }, el(d.id, 0));
+    sc.appendChild(rays(r));
+    sc.appendChild(h("div", { class: "fx-center" }, banner(rare.star + " " + rare.name + (r >= 3 ? "!!" : "!"), r), art,
+      h("div", { class: "fx-name" }, d.n), h("div", { class: "fx-talk" }, "「" + d.talk + "」"),
+      h("div", { class: "fx-sub" }, dup ? "かぶった! " + d.n + "に ごはん +3(×" + count(d.id) + ")" : "✨ NEW! あたらしい なかま! ✨")));
+    stars(sc, r >= 3 ? 40 : 22, r); A.sfx(r >= 2 ? "fanfare" : "good"); A.confetti(r >= 3 ? 60 : 26);
+    if (r >= 3) setTimeout(function () { stars(sc, 30, r); A.sfx("sparkle"); }, 700);
+    if (r >= 4) setTimeout(function () { stars(sc, 30, r); A.sfx("fanfare"); A.confetti(40); }, 1400);
+    A.speak((r >= 3 ? "やったー! " + rare.name + "! " : r === 2 ? "レア! " : "") + d.n + (dup ? "! かぶったから ごはん プラス3!" : "が なかまに なったよ! " + d.talk));
+    var go = h("button", { class: "btn big good fx-next" }, "つぎへ ▶");
+    go.addEventListener("click", function () {
+      closeFx(sc); reveal(d, dup);
+      if (fused && fused.length) setTimeout(function () { showFused(fused); }, 400);
     });
-    A.speak("ガチャ ガチャ… カプセルを タップして あけよう!");
+    setTimeout(function () { sc.appendChild(go); }, r >= 3 ? 1600 : 900);
   }
   function reveal(d, dup) {
     var rare = RARE[d.r];
-    A.sfx(d.r >= 3 ? "levelup" : "good"); A.confetti(d.r >= 3 ? 44 : 20);
     var card = h("section", { class: "reveal r" + d.r },
       h("div", { class: "reveal-flash" }),
       h("div", { class: "reveal-rare", style: { color: rare.color } }, rare.star + " " + rare.name),
@@ -314,7 +403,6 @@
         h("button", { class: "btn big alt", onclick: function () { room(d.id); } }, "🐾 そだてに いく"),
         h("button", { class: "btn-ghost", onclick: C().home }, "ホームへ")));
     C().view(card);
-    A.speak((d.r >= 3 ? "すごい! " + rare.name + "! " : "") + d.n + (dup ? "が また きたよ! ごはん プラス3!" : "が なかまに なったよ! " + d.talk));
   }
 
   /* ================= ガチャなかまの へや ================= */
@@ -354,11 +442,7 @@
         h("button", { class: "btn small good", disabled: s.bag > 0 && o.food < MAXF ? null : true, onclick: function () {
           var r = feedFriend(d.id); if (r === null) return;
           if (r > 0) {
-            A.confetti(30); A.sfx("levelup");
-            var box = h("div", { class: "overlay", role: "dialog" }, h("div", { class: "overlay-card" },
-              h("div", { class: "overlay-face" }, el(d.id, r)), h("h2", null, "せいちょう したよ!"), h("p", null, d.n + "が " + STAGE_NAME[r] + "に なった!"),
-              h("button", { class: "btn big good", onclick: function () { if (box.parentNode) box.parentNode.removeChild(box); room(d.id); } }, "やったー!")));
-            document.body.appendChild(box); A.speak(d.n + "が " + STAGE_NAME[r] + "に なったよ!");
+            showGrow(d, r, function () { room(d.id); });
           } else room(d.id);
         } }, "🍙 ごはん"),
         h("button", { class: "btn small" + (isP ? " alt" : ""), onclick: function () {

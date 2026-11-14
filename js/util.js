@@ -190,11 +190,17 @@
     good: [[523, 0, 0.1], [659, 0.09, 0.1], [784, 0.18, 0.1], [1047, 0.27, 0.3]],
     levelup: [[523, 0, 0.12], [659, 0.12, 0.12], [784, 0.24, 0.12], [1047, 0.36, 0.12], [1319, 0.5, 0.4]],
     pop: [[880, 0, 0.05, "square", 0.08], [1175, 0.05, 0.08, "square", 0.08]],
+    rise: (function () { var o = []; for (var i = 0; i < 14; i++) o.push([300 + i * 55, i * 0.09, 0.08, "square", 0.05]); return o; })(),
+    drum: (function () { var o = []; for (var i = 0; i < 16; i++) o.push([140 + (i % 2) * 30, i * 0.07, 0.06, "triangle", 0.12]); return o; })(),
+    boom: [[90, 0, 0.35, "sawtooth", 0.16], [180, 0.02, 0.3, "square", 0.08], [1400, 0.05, 0.25, "triangle", 0.06]],
+    fanfare: [[523, 0, 0.14], [659, 0.13, 0.14], [784, 0.26, 0.14], [1047, 0.4, 0.5], [784, 0.4, 0.5], [659, 0.4, 0.5], [1319, 0.7, 0.6, "triangle", 0.1]],
+    sparkle: [[1568, 0, 0.08, "triangle", 0.07], [2093, 0.07, 0.08, "triangle", 0.07], [2637, 0.14, 0.12, "triangle", 0.06]],
+    pico: [[1319, 0, 0.09, "square", 0.08], [1760, 0.09, 0.22, "square", 0.08]],
   };
   A.sfx = function (name) {
     if (!A.S.settings.sound) return;
     (SFX[name] || []).forEach(function (n) { tone(n[0], n[1], n[2], n[3], n[4]); });
-    if (navigator.vibrate && (name === "ok" || name === "good" || name === "levelup")) {
+    if (navigator.vibrate && (name === "ok" || name === "good" || name === "levelup" || name === "boom" || name === "fanfare")) {
       try { navigator.vibrate(30); } catch (e) {}
     }
   };
