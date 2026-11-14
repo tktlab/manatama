@@ -29,7 +29,8 @@
   var BY = {}; LIST.forEach(function (d, i) { d.i = i; BY[d.id] = d; });
   var RARE = { 1: { name: "ノーマル", star: "★", color: "#7fb3ff", cap: "#8fd0ff" }, 2: { name: "レア", star: "★★", color: "#ffb31a", cap: "#ffd34d" },
     3: { name: "スーパーレア", star: "★★★", color: "#b46bff", cap: "#c98bff" }, 4: { name: "ウルトラレア", star: "★★★★", color: "#ff4fa0", cap: "rainbow" } };
-  var WEIGHT = { 1: 55, 2: 30, 3: 12, 4: 3 };
+  var WEIGHT = { 1: 66, 2: 26, 3: 7, 4: 1 };
+  var PITY = 30; // 30回 まわしても ★★★ が でなければ、つぎは かならず ★★★いじょう
   var STAGE = [0, 5, 15]; // ごはんの かず: ベビー / こども / おとな
   var MAXF = 30;
   var STAGE_NAME = ["ベビー", "こども", "おとな"];
@@ -183,17 +184,14 @@
   /* ================= ガチャ ================= */
   function draw() {
     var g = st().gacha, tier;
-    if (g.pity >= 9) { tier = Math.random() < 0.2 ? 4 : 3; } // 10回に 1回は スーパーレア以上
+    if (g.pity >= PITY - 1) { tier = Math.random() < 0.15 ? 4 : 3; }
     else {
       var x = Math.random() * 100, acc = 0;
       for (tier = 1; tier <= 4; tier++) { acc += WEIGHT[tier]; if (x < acc) break; }
       if (tier > 4) tier = 1;
     }
     var pool = LIST.filter(function (d) { return d.r === tier; });
-    // まだ もっていない子が 出やすい
-    var fresh = pool.filter(function (d) { return !owned(d.id); });
-    var from = fresh.length && Math.random() < 0.7 ? fresh : pool;
-    var pick = from[Math.floor(Math.random() * from.length)];
+    var pick = pool[Math.floor(Math.random() * pool.length)]; // かぶりも ふつうに 出る
     g.pity = tier >= 3 ? 0 : g.pity + 1;
     g.pulls++;
     return pick;
@@ -224,7 +222,7 @@
         h("button", { class: "btn big go" + (t ? " pulse" : ""), disabled: t ? null : true, onclick: function () { pull(); } }, t ? "🎰 ガチャを まわす!" : "チケットが ないよ"),
         t ? null : h("p", { class: "note" }, "チケットは まいにちの ログインボーナスと、「きょうの ミッション」を ぜんぶ クリアすると もらえるよ!"),
         h("div", { class: "rates" }, rates),
-        h("p", { class: "muted center" }, "10かいに 1かいは ★★★ いじょうが かならず でるよ(あと " + Math.max(1, 10 - st().gacha.pity) + "かい)")),
+        h("p", { class: "muted center" }, "★★★は なかなか でないよ。でも " + PITY + "かい まわすと かならず でる!(あと " + Math.max(1, PITY - st().gacha.pity) + "かい)")),
       h("button", { class: "btn big alt", onclick: function () { A.sfx("tap"); room(); } }, "🐾 ガチャなかまの へやへ"));
     A.speak(t ? "ガチャチケットが " + t + "まい あるよ。まわして みよう!" : "チケットが ないよ。ミッションを クリアしよう!");
   }
