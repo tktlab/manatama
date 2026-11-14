@@ -117,41 +117,48 @@
   }
   function count(id) { var o = owned(id); return o ? (o.count || 1 + (o.dup || 0)) : 0; }
   function spare(tier) { return LIST.reduce(function (n, d) { return n + (d.r === tier ? Math.max(0, count(d.id) - 1) : 0); }, 0); }
-  /* がったい: tier の かぶりを FUSE[tier] ぴき つかって、tier+1 の なかまを 1ぴき */
-  function fuse(tier) {
-    var need = FUSE[tier];
-    if (!need || spare(tier) < need) return;
-    var left = need;
-    while (left > 0) {
-      var mine = LIST.filter(function (d) { return d.r === tier && count(d.id) > 1; }).sort(function (a, b) { return count(b.id) - count(a.id); });
-      var o = owned(mine[0].id); o.count = count(mine[0].id) - 1; left--;
+  /* がったい(自動): かぶりが FUSE[tier] ひき たまったら、アプリが かってに 1つ上の なかまに する。
+     子どもは なにも えらばなくて いい。お知らせが 出るだけ。 */
+  function autoFuse() {
+    var out = [];
+    for (var t = 1; t <= 3; t++) {
+      while (spare(t) >= FUSE[t]) {
+        for (var left = FUSE[t]; left > 0; left--) {
+          var mine = LIST.filter(function (d) { return d.r === t && count(d.id) > 1; }).sort(function (a, b) { return count(b.id) - count(a.id); });
+          owned(mine[0].id).count = count(mine[0].id) - 1;
+        }
+        var pool = LIST.filter(function (d) { return d.r === t + 1; }), d = pool[Math.floor(Math.random() * pool.length)];
+        var was = owned(d.id);
+        if (was) { was.count = count(d.id) + 1; was.food = Math.min(MAXF, was.food + 3); }
+        else st().gacha.owned[d.id] = { food: 0, got: Date.now(), dup: 0, count: 1 };
+        out.push({ from: t, d: d, dup: !!was });
+      }
     }
-    var pool = LIST.filter(function (d) { return d.r === tier + 1; }), d = pool[Math.floor(Math.random() * pool.length)];
-    var was = owned(d.id);
-    if (was) { was.count = count(d.id) + 1; was.food = Math.min(MAXF, was.food + 3); }
-    else st().gacha.owned[d.id] = { food: 0, got: Date.now(), dup: 0, count: 1 };
-    A.save();
-    // えんしゅつ
-    var orbs = h("div", { class: "fuse-orbs" });
-    for (var i = 0; i < Math.min(need, 15); i++) orbs.appendChild(h("span", { class: "fuse-orb r" + tier, style: { "--a": (i / Math.min(need, 15)) * 360 + "deg", "animation-delay": i * 0.05 + "s" } }));
-    C().view(h("section", { class: "gacha-stage fuse-stage" }, h("h2", null, "がったい!"), orbs, h("p", { class: "note center" }, RARE[tier].star + " を " + need + "ひき あつめて…")));
-    A.sfx("pop"); A.speak("がったい!");
-    setTimeout(function () { A.sfx("levelup"); reveal(d, !!was, "がったい"); }, 1700);
+    if (out.length) A.save();
+    return out;
   }
-  function fusePanel(after) {
-    var rows = [1, 2, 3].map(function (t) {
-      var have = spare(t), need = FUSE[t], ok = have >= need;
-      return h("div", { class: "fuse-row" + (ok ? " ok" : "") },
-        h("div", { class: "fuse-text" }, h("b", { style: { color: RARE[t].color } }, RARE[t].star), " かぶり ", h("b", null, have + " / " + need),
-          h("span", null, " → "), h("b", { style: { color: RARE[t + 1].color } }, RARE[t + 1].star + " 1ぴき")),
-        h("div", { class: "growbar small" }, h("div", { class: "growfill", style: { width: Math.min(100, Math.round(have / need * 100)) + "%" } })),
-        ok ? h("button", { class: "btn small good pulse", onclick: function () { A.sfx("tap"); fuse(t); } }, "✨ がったい!") : null);
+  function showFused(list, after) {
+    if (!list.length) return after && after();
+    var f = list.shift(), d = f.d;
+    var text = RARE[f.from].star + RARE[f.from].name + "が " + FUSE[f.from] + "ひき あつまったので、" + RARE[d.r].star + RARE[d.r].name + "の " + d.n + (f.dup ? "が もう1ぴき きたよ!" : "が なかまに なったよ!");
+    A.sfx("levelup"); A.confetti(36);
+    var box = h("div", { class: "overlay", role: "dialog", "aria-modal": "true" },
+      h("div", { class: "overlay-card fuse-card r" + d.r },
+        h("div", { class: "fuse-pico" }, "ピコーン!"),
+        h("div", { class: "overlay-face pop" }, el(d.id)),
+        h("h2", { style: { color: RARE[d.r].color } }, RARE[d.r].star + " " + d.n),
+        h("p", null, text),
+        h("button", { class: "btn big good", onclick: function () { if (box.parentNode) box.parentNode.removeChild(box); showFused(list, after); } }, "やったー!")));
+    document.body.appendChild(box);
+    A.speak("ピコーン! " + text);
+  }
+  function fuseInfo() {
+    var parts = [1, 2, 3].map(function (t) {
+      return h("span", { class: "fuse-chip" }, h("b", { style: { color: RARE[t].color } }, RARE[t].star), " " + spare(t) + "/" + FUSE[t]);
     });
-    return h("section", { class: "fuse-panel" },
-      h("div", { class: "mission-title" }, "✨ がったい ",
-        h("button", { class: "btn-ghost icon say", "aria-label": "よむ", onclick: function () { A.speak("かぶった なかまを あつめると、1つ うえの ランクの なかまに がったい できるよ。ノーマル " + FUSE[1] + "ひきで レア、レア " + FUSE[2] + "ひきで スーパーレア、スーパーレア " + FUSE[3] + "ひきで ウルトラレア。"); } }, "🔊")),
-      h("p", { class: "muted" }, "かぶった なかまを あつめると、1つ上の ランクに がったい できるよ!(どの子も 1ぴきは のこるよ)"),
-      rows);
+    return h("div", { class: "fuse-info" },
+      h("div", null, "✨ かぶりが たまると じどうで 1つ上の なかまに がったい!"),
+      h("div", { class: "fuse-chips" }, parts));
   }
   function ownedList() { return LIST.filter(function (d) { return owned(d.id); }); }
 
@@ -263,7 +270,7 @@
         t ? null : h("p", { class: "note" }, "チケットは まいにちの ログインボーナスと、「きょうの ミッション」を ぜんぶ クリアすると もらえるよ!"),
         h("div", { class: "rates" }, rates),
         h("p", { class: "muted center" }, "★★★は なかなか でないよ。でも " + PITY + "かい まわすと かならず でる!(あと " + Math.max(1, PITY - st().gacha.pity) + "かい)")),
-      fusePanel(),
+      fuseInfo(),
       h("button", { class: "btn big alt", onclick: function () { A.sfx("tap"); room(); } }, "🐾 ガチャなかまの へやへ"));
     A.speak(t ? "ガチャチケットが " + t + "まい あるよ。まわして みよう!" : "チケットが ないよ。ミッションを クリアしよう!");
   }
@@ -275,6 +282,7 @@
     if (was) { was.food = Math.min(MAXF, was.food + 3); was.dup = (was.dup || 0) + 1; was.count = count(d.id) + 1; }
     else s.gacha.owned[d.id] = { food: 0, got: Date.now(), dup: 0, count: 1 };
     A.save();
+    var fused = autoFuse();
     // えんしゅつ: ハンドルが まわる → カプセルが おちる → タップで ひらく
     var m = machineEl(true);
     var cap = h("div", { class: "capsule drop r" + d.r, style: { "--cap": rare.cap === "rainbow" ? "#ff8fb8" : rare.cap } }, h("span", { class: "cap-top" }), h("span", { class: "cap-bot" }));
@@ -287,11 +295,11 @@
     cap.addEventListener("click", function () {
       if (opened) return; opened = true;
       cap.classList.add("open");
-      setTimeout(function () { reveal(d, !!was); }, 520);
+      setTimeout(function () { reveal(d, !!was); if (fused.length) setTimeout(function () { showFused(fused); }, 1400); }, 520);
     });
     A.speak("ガチャ ガチャ… カプセルを タップして あけよう!");
   }
-  function reveal(d, dup, how) {
+  function reveal(d, dup) {
     var rare = RARE[d.r];
     A.sfx(d.r >= 3 ? "levelup" : "good"); A.confetti(d.r >= 3 ? 44 : 20);
     var card = h("section", { class: "reveal r" + d.r },
@@ -300,7 +308,7 @@
       h("div", { class: "reveal-art pop" }, el(d.id, 0)),
       h("h1", null, d.n),
       h("p", { class: "reveal-talk" }, "「" + d.talk + "」"),
-      h("p", null, (how ? "がったいで " : "") + (dup ? "おなじ なかまが きたよ! " + d.n + "に ごはん +3!(×" + count(d.id) + ")" : "あたらしい なかまに なった!")),
+      h("p", null, (dup ? "おなじ なかまが きたよ! " + d.n + "に ごはん +3!(×" + count(d.id) + ")" : "あたらしい なかまに なった!")),
       h("div", { class: "choice-col" },
         st().tickets ? h("button", { class: "btn big go", onclick: pull }, "🎰 もう1かい まわす(のこり " + st().tickets + ")") : null,
         h("button", { class: "btn big alt", onclick: function () { room(d.id); } }, "🐾 そだてに いく"),
@@ -320,6 +328,7 @@
     return after > before ? after : -1;
   }
   function room(focus) {
+    var pend = autoFuse(); if (pend.length) return showFused(pend, function () { room(focus); });
     var s = st(), list = ownedList();
     if (!list.length) {
       C().view(C().topbar("🐾 ガチャなかま", C().home),
@@ -360,8 +369,8 @@
     C().view(C().topbar("🐾 ガチャなかまの へや", C().home),
       h("div", { class: "room-head" }, h("span", null, "🍙 ごはん × " + (s.bag || 0)), h("span", null, "🎟️ × " + s.tickets)),
       h("p", { class: "note" }, "ごはんを あげると そだつよ。「いっしょに たたかう」に すると、もんだいの バトルに でてくれるよ!"),
+      fuseInfo(),
       h("div", { class: "friend-grid" }, cards),
-      fusePanel(),
       h("button", { class: "btn big go", onclick: function () { A.sfx("tap"); C().quickStart(); } }, "✏️ もんだいで ごはんを もらう ▶"));
   }
 
@@ -411,7 +420,7 @@
 
   /* ---------- 公開 ---------- */
   A.gacha = {
-    list: LIST, rare: RARE, count: count, spare: spare, FUSE: FUSE, el: el, svg: svg, stageOf: stageOf, owned: owned, ownedList: ownedList, byId: BY,
+    list: LIST, rare: RARE, count: count, spare: spare, FUSE: FUSE, autoFuse: autoFuse, el: el, svg: svg, stageOf: stageOf, owned: owned, ownedList: ownedList, byId: BY,
     loginCheck: loginCheck, missionCard: missionCard, home: gachaHome, room: room, pull: pull,
     addReview: addReview, clearReview: clearReview, reviewHome: reviewHome, state: st,
     reviewCount: function () { return Object.keys(st().review).length; },
