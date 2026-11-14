@@ -161,6 +161,8 @@
   var TAUNTS = ["とけるかな〜?", "ふふふ…", "わかるかな?", "かかってこい!", "この もんだい むずかしいぞ〜"];
   /* たたかう なかま: いま育てている子が うまれていれば その子、まだ たまごなら さいごに そつぎょうした子。だれも いなければ バトルなし */
   function fighterPet() {
+    var gp = A.gacha && A.gacha.partner();
+    if (gp) return { gacha: gp };
     var a = activePet();
     if (formOf(a) >= 2) return a;
     var ps = S().pets;
@@ -201,8 +203,9 @@
     var f = fighterPet();
     if (!f || !Q || !Q.foe) { Q && (Q.fx = null); return null; }
     var fx = Q.fx; Q.fx = null;
-    var form = formOf(f), c = CREATURES[f.kind % CREATURES.length];
-    var fighter = h("div", { class: "fighter" }, A.creatures.el(f.kind, form));
+    var form, c, fighter;
+    if (f.gacha) { var gs = A.gacha.stageOf(f.gacha.id); form = gs >= 2 ? 3 : 2; c = f.gacha; fighter = h("div", { class: "fighter" }, A.gacha.el(f.gacha.id, gs)); }
+    else { form = formOf(f); c = CREATURES[f.kind % CREATURES.length]; fighter = h("div", { class: "fighter" }, A.creatures.el(f.kind, form)); }
     var foe = h("div", { class: "foe" + (fx === "appear" ? " appear" : "") + (Q.done && !fx ? " gone" : "") }, A.enemies.el(Q.foe.e.id, Q.foe.hue));
     var talk = h("div", { class: "taunt" }, Q.done && !fx ? "やられた〜!" : Q.taunt);
     var stage = h("div", { class: "battle", "aria-label": Q.foe.e.n + "が あらわれた" }, fighter, foe, talk);
@@ -352,7 +355,7 @@
     view(
       h("header", { class: "home-head" },
         h("div", null, h("div", { class: "hello" }, (s.name ? s.name + "、こんにちは!" : "こんにちは!")),
-          h("div", { class: "streak" }, "🔥 " + s.streak.n + "日つづけてる")),
+          h("div", { class: "streak" }, "🔥 " + s.streak.n + "日つづけてる   🎟️ " + A.gacha.state().tickets + "   🍙 " + (s.bag || 0))),
         h("div", { class: "toggles" },
           h("button", { class: "btn-ghost icon", "aria-label": "みやすさ・こえの せってい", onclick: function () { A.sfx("tap"); A.settingsRoom(home); } }, "👀"),
           h("button", { class: "btn-ghost icon", "aria-label": "こえ", onclick: function () { s.settings.voice = !s.settings.voice; A.save(); if (!s.settings.voice) A.stopSpeak(); home(); } }, s.settings.voice ? "🗣️" : "🤐"),
@@ -365,21 +368,28 @@
         h("div", { class: "growtext" }, "ごはん " + p.food + " / " + THRESH[3] + "   " + FORM_NEXT[f] + " あと " + Math.max(0, b1 - p.food)),
         h("button", { class: "btn big feed" + (bag ? " pulse" : ""), disabled: bag ? null : true, onclick: function () {
           if (!(s.bag > 0)) return;
-          s.bag--; var ev = growBy(1); A.save(); A.sfx("good"); A._ate = true;
+          s.bag--; A.gacha.onFedPet(); var ev = growBy(1); A.save(); A.sfx("good"); A._ate = true;
           if (ev.length) showEvents(ev, home); else home();
         } }, "🍙 ごはんを あげる  ×" + bag),
         bag ? null : h("div", { class: "mission-sub" }, "もんだいを とくと ごはんが もらえるよ!")),
       h("section", { class: "mission" },
-        h("div", { class: "mission-title" }, "きょうの ミッション"),
+        h("div", { class: "mission-title" }, "✏️ もんだいで ごはんを ゲット"),
         h("div", { class: "mdots" }, dots),
         h("button", { class: "btn big go", onclick: quickStart }, n >= GOAL ? "もっと あそぶ ▶" : "あそぶ ▶"),
         h("div", { class: "mission-sub" }, grade() + "ねんせいの もんだいが でるよ"),
         h("button", { class: "btn big alt", style: { "margin-top": "10px" }, onclick: function () { A.sfx("tap"); A.write.home(); } }, "✍️ かく れんしゅう")),
+      h("div", { class: "fun-row" },
+        h("button", { class: "fun-btn gacha" + (A.gacha.state().tickets ? " pulse" : ""), onclick: function () { A.sfx("tap"); A.gacha.home(); } }, h("span", null, "🎰"), "ガチャ", h("b", { class: "badge" }, "🎟️" + A.gacha.state().tickets)),
+        h("button", { class: "fun-btn", onclick: function () { A.sfx("tap"); A.gacha.room(); } }, h("span", null, "🐾"), "ガチャなかま", h("b", { class: "badge" }, String(A.gacha.ownedList().length))),
+        h("button", { class: "fun-btn" + (A.gacha.reviewCount() ? " warn" : ""), onclick: function () { A.sfx("tap"); A.gacha.reviewHome(); } }, h("span", null, "📒"), "ふくしゅう", h("b", { class: "badge" }, String(A.gacha.reviewCount())))),
+      A.gacha.missionCard(home),
       h("nav", { class: "bottom-nav" },
         h("button", { class: "nav-btn", onclick: stageSelect }, h("span", null, "🗺️"), "えらぶ"),
-        h("button", { class: "nav-btn", onclick: function () { A.sfx("tap"); A.settingsRoom(home); } }, h("span", null, "👀"), "みやすさ"),
+        h("button", { class: "nav-btn", onclick: function () { A.sfx("tap"); A.gacha.home(); } }, h("span", null, "🎰"), "ガチャ"),
+        h("button", { class: "nav-btn", onclick: function () { A.sfx("tap"); A.gacha.reviewHome(); } }, h("span", null, "📒"), "ふくしゅう"),
         h("button", { class: "nav-btn", onclick: function () { zukan("pets"); } }, h("span", null, "📖"), "ずかん")),
       h("div", { class: "foot" }, h("button", { class: "btn alt save-btn", onclick: function () { A.sfx("tap"); saveRoom(); } }, "💾 きろくを ほぞん・ひきつぎ"), adultBtn));
+    A.gacha.loginCheck(home);
   }
 
   function welcome() {
@@ -450,10 +460,22 @@
     A.sfx("tap");
     nextQuestion();
   }
+  /* ふくしゅう: まちがえた もんだいを そのまま もういちど */
+  function startReviewMission(ids) {
+    Q = { review: true, reviewIds: ids, learned: 0, subject: null, focus: null, pool: null, label: "ふくしゅう", count: 0, target: ids.length, seen: {}, ok: 0, food: 0, newCards: [], helped: 0, events: [] };
+    nextQuestion();
+  }
   function nextQuestion() {
     if (Q.mix && Q.count > 0) { var ps = playableSubjects(); Q.mixIdx++; Q.subject = ps[Q.mixIdx % ps.length].id; }
-    var sk = Q.focus || (Q.pool ? recommendedFromList(Q.pool, true) : recommendedSkill(Q.subject));
-    var p = pickProblem(sk, Q.seen);
+    var sk, p;
+    if (Q.review) {
+      var pid = Q.reviewIds[Q.count];
+      p = D.problems.filter(function (x) { return x.id === pid; })[0];
+      sk = skillMap[p.skill]; Q.subject = sk.subject;
+    } else {
+      sk = Q.focus || (Q.pool ? recommendedFromList(Q.pool, true) : recommendedSkill(Q.subject));
+      p = pickProblem(sk, Q.seen);
+    }
     Q.seen[p.id] = true;
     Q.p = p; Q.skill = sk;
     Q.foe = A.enemies.forSubject(Q.subject, sk._i); Q.fx = "appear"; Q.taunt = TAUNTS[Math.floor(Math.random() * TAUNTS.length)];
@@ -526,6 +548,7 @@
         h("div", { class: "fb-title" }, indep ? "🎉 ばっちり!" : "⭕ できたね!"),
         h("p", null, p.explanation, " ", h("button", { class: "btn-ghost icon say", "aria-label": "よむ", onclick: function () { A.speak(p.explanation, true); } }, "🔊")),
         h("p", { class: "gain" }, "🍙 ごはん +" + Q.lastFood + " (ふくろに ゲット!)" + (Q.newCard ? "   🃏 カード ゲット!" : "")),
+        Q.learnedNow ? h("p", { class: "gain" }, "📒 おぼえた! ふくしゅうリストから きえたよ") : null,
         h("button", { class: "btn big go", onclick: afterAnswer }, Q.count >= Q.target ? "けっかを 見る ▶" : "つぎへ ▶")));
     } else {
       if (Q.wrong.length) {
@@ -568,6 +591,8 @@
       Q.newCard = beforeStars === 0;
       if (Q.newCard) Q.newCards.push(Q.skill.id);
       touchDay(true);
+      A.gacha.onSolved();
+      if (indep && A.gacha.clearReview(p.id)) { Q.learnedNow = true; if (Q.review) { Q.learned++; A.gacha.onReviewSolved(); } } else Q.learnedNow = false;
       logEvent({ t: Date.now(), pid: p.id, skill: Q.skill.id, subject: Q.subject, ok: true, help: Q.helped, wrong: Q.wrong.length });
       Q.events = Q.events.concat(earn(Q.lastFood));
       A.save();
@@ -576,6 +601,7 @@
     } else {
       if (Q.wrong.length === 0) r.ng++;
       Q.wrong.push(c);
+      A.gacha.addReview(p);
       Q.fx = "counter";
       A.sfx("ng");
       A.save();
@@ -593,6 +619,7 @@
     if (!Q.helped) { Q.helped = true; }
     var r = rec(Q.skill.id);
     r.help++;
+    A.gacha.addReview(Q.p);
     A.save();
     Q.tutorPassed = 0;
     var root = h("div", { class: "tutor" });
@@ -625,12 +652,14 @@
     var p = activePet();
     view(h("section", { class: "result" },
       h("div", { class: "result-face jump" }, A.petEmoji()),
-      h("h1", null, "ミッション クリア!"),
+      h("h1", null, Q.review ? "ふくしゅう クリア!" : "ミッション クリア!"),
       h("p", null, Q.target + "もん クリア。ごはん +" + Q.food + " もらったよ"),
+      Q.review ? h("p", { class: "gain" }, "📒 おぼえた もんだい: " + Q.learned + "もん" + (A.gacha.reviewCount() ? "(のこり " + A.gacha.reviewCount() + "もん)" : "(ぜんぶ おぼえた!)")) : null,
       h("p", { class: "muted" }, petName(p) + "  ごはん " + p.food + " / " + THRESH[3]),
       cards.length ? h("div", null, h("h3", null, "あたらしい カード"), h("div", { class: "card-row" }, cards)) : null,
       h("div", { class: "choice-col" },
-        h("button", { class: "btn big go", onclick: function () { if (Q.mix) quickStart(); else startMission(Q.subject, Q.focus, { pool: Q.pool, label: Q.label }); } }, "つづけて あそぶ ▶"),
+        h("button", { class: "btn big go", onclick: function () { if (Q.review) A.gacha.reviewHome(); else if (Q.mix) quickStart(); else startMission(Q.subject, Q.focus, { pool: Q.pool, label: Q.label }); } }, Q.review ? "📒 ふくしゅうに もどる ▶" : "つづけて あそぶ ▶"),
+        A.gacha.state().tickets ? h("button", { class: "btn big good pulse", onclick: A.gacha.home }, "🎰 ガチャチケットが あるよ!") : null,
         h("button", { class: "btn big alt", onclick: home }, "ホームに もどる"))));
     A.sfx("levelup"); A.confetti(30);
     A.speak("ミッション クリア! よくがんばったね");
@@ -641,6 +670,7 @@
     var tabs = h("div", { class: "tabs" },
       h("button", { class: "tab" + (tab === "pets" ? " on" : ""), onclick: function () { zukan("pets"); } }, "🐾 なかま"),
       h("button", { class: "tab" + (tab === "foes" ? " on" : ""), onclick: function () { zukan("foes"); } }, "👾 てき"),
+      h("button", { class: "tab" + (tab === "gacha" ? " on" : ""), onclick: function () { zukan("gacha"); } }, "🎰 ガチャ"),
       h("button", { class: "tab" + (tab === "cards" ? " on" : ""), onclick: function () { zukan("cards"); } }, "🃏 カード"));
     var body;
     if (tab === "pets") {
@@ -657,6 +687,17 @@
           h("div", { class: "z-stars" }, done || growing ? (c.type === "cool" ? "⚔️ " : "💗 ") + "★".repeat(c.r) + "☆".repeat(3 - c.r) : ""));
       });
       body = h("div", null, h("p", { class: "muted" }, "あつめた " + gotN + " / " + CREATURES.length + "。そだてあげると ずかんに のるよ。"), h("div", { class: "z-grid" }, items));
+    } else if (tab === "gacha") {
+      var gl = A.gacha.list, gotG = 0;
+      var gitems = gl.map(function (d) {
+        var o = A.gacha.owned(d.id); if (o) gotG++;
+        var rr = A.gacha.rare[d.r];
+        return h("div", { class: "z-item" + (o ? " on" : "") },
+          h("div", { class: "z-face cr-face" }, o ? A.gacha.el(d.id) : A.gacha.el(d.id, 2, "cr-sil")),
+          h("small", null, o ? d.n : "???"),
+          h("div", { class: "z-stars", style: { color: rr.color } }, rr.star));
+      });
+      body = h("div", null, h("p", { class: "muted" }, "ガチャなかま " + gotG + " / " + gl.length + "。ガチャで あつめよう!"), h("div", { class: "z-grid" }, gitems));
     } else if (tab === "foes") {
       var fo = S().foes || {}, total = 0;
       var fitems = A.enemies.list.map(function (e) {
@@ -773,6 +814,6 @@
       app.appendChild(h("pre", { class: "err" }, "エラー: " + (e && e.message)));
     }
   };
-  A.core = { grade: grade, gradeSkills: gradeSkills, playableSubjects: playableSubjects, feed: earn, earn: earn, touchDay: touchDay, logEvent: logEvent, showEvents: showEvents, view: view, topbar: topbar, stars: stars, skillMap: skillMap, startMission: startMission, home: home, SUBJECTS: SUBJECTS, subjectInfo: subjectInfo, save: function () { A.save(); } };
+  A.core = { quickStart: quickStart, startReviewMission: startReviewMission, grade: grade, gradeSkills: gradeSkills, playableSubjects: playableSubjects, feed: earn, earn: earn, touchDay: touchDay, logEvent: logEvent, showEvents: showEvents, view: view, topbar: topbar, stars: stars, skillMap: skillMap, startMission: startMission, home: home, SUBJECTS: SUBJECTS, subjectInfo: subjectInfo, save: function () { A.save(); } };
   A.debug = { skill: function (id) { return skillMap[id]; }, stars: stars, Q: function () { return Q; }, startMission: startMission, home: home, feed: growBy, view: view };
 })();
