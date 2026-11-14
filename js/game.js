@@ -413,36 +413,58 @@
   }
 
   /* ================= ステージ(教科マップ) ================= */
+  /* えらぶ: 教科 → 単元。いまの学年の 単元に くわえて、まえの 学年の 単元も ひらいて えらべる */
+  function pastSkills(sub) { var out = []; for (var g = grade() - 1; g >= 1; g--) out = out.concat(gradeSkills(sub, g)); return out; }
   function stageSelect() {
-    var cards = gradeSubjects().map(function (sub) {
+    var cards = SUBJECTS.filter(function (sub) { return gradeSkills(sub.id).length || pastSkills(sub.id).length; }).map(function (sub) {
       var list = gradeSkills(sub.id), max = list.length * 3;
       var got = list.reduce(function (n, sk) { return n + stars(sk.id); }, 0);
-      if (!list.length) return h("button", { class: "subject-card off", style: { "--c": sub.color }, onclick: function () { A.toast("この きょうかは じゅんびちゅう だよ"); A.speak("この きょうかは じゅんびちゅう だよ"); } },
-        h("div", { class: "subject-emoji" }, sub.emoji), h("div", { class: "subject-name" }, sub.id), h("div", { class: "subject-stars" }, "じゅんびちゅう"));
       return h("button", { class: "subject-card", style: { "--c": sub.color }, onclick: function () { A.sfx("tap"); stageMap(sub.id); } },
         h("div", { class: "subject-emoji" }, sub.emoji),
         h("div", { class: "subject-name" }, sub.id),
-        h("div", { class: "subject-stars" }, "⭐ " + got + " / " + max));
+        h("div", { class: "subject-stars" }, list.length ? "⭐ " + got + " / " + max : "まえに ならった ところ"));
     });
     view(topbar("どの ぼうけんに いく?", home),
+      h("p", { class: "note" }, "きょうかを えらぶと、たんげんを えらべるよ。まえに ならった ところも ひらいて えらべるよ。"),
       h("div", { class: "subject-grid" }, cards),
       h("button", { class: "btn big alt", onclick: function () {
         var ps = playableSubjects(); if (!ps.length) return;
         startMission(ps[Math.floor(Math.random() * ps.length)].id, null);
       } }, "🎲 おまかせ"));
   }
-  function stageMap(subId) {
-    var sub = subjectInfo(subId), rec0 = recommendedSkill(subId), list = gradeSkills(subId);
-    var nodes = list.map(function (sk, i) {
+  function nodeList(subId, list, rec0) {
+    var sub = subjectInfo(subId);
+    return list.map(function (sk, i) {
       var st = stars(sk.id), isRec = rec0 && rec0.id === sk.id;
       var starTxt = "⭐".repeat(st) + "☆".repeat(3 - st);
       return h("button", { class: "node" + (st ? " got" : "") + (isRec ? " rec" : "") + (i % 2 ? " right" : ""), style: { "--c": sub.color }, onclick: function () { A.sfx("tap"); startMission(subId, sk); } },
-        h("span", { class: "node-icon" }, sub.icons[i % sub.icons.length]),
+        h("span", { class: "node-icon num" }, String(i + 1)),
         h("span", { class: "node-body" }, h("b", null, sk.name), h("small", null, starTxt + (isRec ? "  ← いまここ" : ""))));
     });
-    view(topbar(sub.emoji + " " + subId + "ステージ", stageSelect),
-      h("div", { class: "path" }, nodes),
-      h("button", { class: "btn big go", onclick: function () { startMission(subId, null); } }, "おすすめで すすむ ▶"));
+  }
+  function stageMap(subId, openG) {
+    var sub = subjectInfo(subId), list = gradeSkills(subId), rec0 = list.length ? recommendedSkill(subId) : null;
+    var parts = [topbar(sub.emoji + " " + subId, stageSelect)];
+    if (list.length) {
+      parts.push(h("div", { class: "unit-head" }, "📍 いま ならっている ところ(" + grade() + "ねんせい)"));
+      parts.push(h("div", { class: "path" }, nodeList(subId, list, rec0)));
+      parts.push(h("button", { class: "btn big go", onclick: function () { startMission(subId, null); } }, "おすすめで すすむ ▶"));
+    }
+    var past = [];
+    for (var g = grade() - 1; g >= 1; g--) {
+      var pl = gradeSkills(subId, g);
+      if (!pl.length) continue;
+      var got = pl.reduce(function (n, sk) { return n + stars(sk.id); }, 0);
+      past.push(h("details", { class: "past-grade", open: openG === g ? true : null },
+        h("summary", null, "📂 " + g + "ねんせいで ならう ところ", h("small", null, "  " + pl.length + "こ  ⭐" + got)),
+        h("div", { class: "path" }, nodeList(subId, pl, null))));
+    }
+    if (past.length) {
+      parts.push(h("div", { class: "unit-head" }, "🔙 まえに ならった ところも えらべるよ"));
+      parts.push(h("p", { class: "muted" }, "わからない ところや、もういちど やりたい ところを タップしてね。"));
+      parts = parts.concat(past);
+    }
+    view.apply(null, parts);
   }
 
   /* ================= ミッション(クイズ) ================= */
