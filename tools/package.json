@@ -1,0 +1,7 @@
+{
+  "name": "manatama-tools",
+  "private": true,
+  "description": "まなたま 教材ビルド(ふりがな自動付与)",
+  "scripts": { "build": "node build.js" },
+  "dependencies": { "kuromoji": "^0.1.2" }
+}
