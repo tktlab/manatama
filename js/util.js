@@ -45,10 +45,24 @@
   A.plain = function (t) { return String(t == null ? "" : t).replace(RUBY, "$1").replace(/[¦«»]/g, ""); };
   A.kana = function (t) { return String(t == null ? "" : t).replace(RUBY, "$2").replace(/¦/g, " ").replace(/[«»]/g, ""); };
   A.rt = function (t) {
+    // «…» は「この字のことを聞いているよ」の目印: 四角で囲んで表示する(ふりがなは付けない)
+    var frag = document.createDocumentFragment();
+    String(t).split(/(«[^»]*»)/).forEach(function (seg) {
+      if (!seg) return;
+      if (seg.charAt(0) === "«") {
+        var box = document.createElement("span");
+        box.className = "target";
+        box.appendChild(document.createTextNode(seg.slice(1, -1)));
+        frag.appendChild(box);
+      } else frag.appendChild(rtPart(seg));
+    });
+    return frag;
+  };
+  function rtPart(t) {
     var mode = (A.S && A.S.settings && A.S.settings.kana) || "ruby";
     var frag = document.createDocumentFragment();
     if (mode === "kana") { frag.appendChild(document.createTextNode(A.kana(t).replace(/ {2,}/g, " "))); return frag; }
-    var s = String(t).replace(/[¦«»]/g, ""), last = 0, m;
+    var s = String(t).replace(/¦/g, ""), last = 0, m;
     RUBY.lastIndex = 0;
     while ((m = RUBY.exec(s))) {
       if (m.index > last) frag.appendChild(document.createTextNode(s.slice(last, m.index)));
@@ -63,7 +77,7 @@
     }
     if (last < s.length) frag.appendChild(document.createTextNode(s.slice(last)));
     return frag;
-  };
+  }
   A.clear = function (el) {
     while (el.firstChild) el.removeChild(el.firstChild);
     return el;
@@ -187,7 +201,7 @@
 
   /* ---------- 読み上げ ---------- */
   A.reading = function (t) {
-    return A.plain(String(t).replace(/«[^»]*»/g, " この字 "))
+    return A.plain(String(t).replace(/«[^»]*»/g, " しかくで かこんだ 字 "))
       .replace(/□/g, " しかく ")
       .replace(/(\d)\s*cm²/g, "$1へいほうセンチメートル")
       .replace(/(\d)\s*km/g, "$1キロメートル").replace(/(\d)\s*cm/g, "$1センチメートル").replace(/(\d)\s*mm/g, "$1ミリメートル")
