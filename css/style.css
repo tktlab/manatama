@@ -557,3 +557,18 @@ html[data-kana="kana"] .qtext, html[data-kana="kana"] .big-text { word-break: ke
 .kp-col .kp-key { font-size: 19px; min-height: 40px; padding: 0; border-radius: 9px; }
 .kp-go { margin-top: 4px; }
 .typed-ans b { font-size: 1.2em; }
+
+/* ---------- だれが あそぶ? ---------- */
+.hello.who { background: none; border: 0; padding: 4px 0; font: inherit; font-weight: 800; color: var(--ink); text-align: left; cursor: pointer; }
+.hello.who small { color: var(--muted); }
+.player-list { display: flex; flex-direction: column; gap: 12px; width: 100%; margin: 12px 0; }
+.player-card { display: flex; align-items: center; gap: 12px; width: 100%; border: 3px solid transparent; border-radius: 20px; background: #fff; padding: 14px 16px; box-shadow: var(--shadow); font: inherit; text-align: left; }
+.player-card.on { border-color: var(--blue); }
+.player-icon { font-size: 40px; }
+.player-name { font-size: 22px; font-weight: 800; flex: 1; }
+.player-card small { color: var(--muted); font-size: 14px; }
+/* ---------- ホーム画面に 追加 ---------- */
+.a2hs { background: #fffbe6; border: 2px dashed #f0c14b; border-radius: 14px; padding: 6px 12px; margin: 0 0 10px; font-size: 14px; }
+.a2hs summary { cursor: pointer; }
+.a2hs-title { font-weight: 800; margin-bottom: 4px; }
+.a2hs .btn { margin-top: 6px; }

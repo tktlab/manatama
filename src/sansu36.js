@@ -356,7 +356,7 @@
     prereq: ["s6-fracmul"],
     checks: [["1/3÷1/2は?", ["2/3", "1/6", "3/2"], "1/3×2/1＝2/3。"], ["4/5 の 逆数は?", ["5/4", "4/5", "1/5"], "分母と 分子を 入れかえる。"]],
     gen: function (r) {
-      var a = r.int(1, 5), b = r.int(a + 1, 9), c = r.int(1, 5), d = r.int(c + 1, 9); if (gcd(a, b) > 1 || gcd(c, d) > 1) return null;
+      var a = r.int(1, 5), b = r.int(a + 1, 9), c = r.int(1, 5), d = r.int(c + 1, 9); if (gcd(a, b) > 1 || gcd(c, d) > 1 || (a === c && b === d)) return null;
       return [f(a, b) + "÷" + f(c, d) + "＝?", [red(a * d, b * c), red(a * c, b * d), red(b * c, a * d) === red(a * d, b * c) ? f(a + d, b + c) : red(b * c, a * d), f(a * d + 1, b * c)], f(c, d) + " を ひっくり返して " + f(d, c) + " を かけよう。", f(a, b) + "×" + f(d, c) + "＝" + f(a * d, b * c) + (red(a * d, b * c) !== f(a * d, b * c) ? "＝" + red(a * d, b * c) : "") + "。"];
     } });
 

@@ -321,6 +321,63 @@
     var talk = ["おなか すいた〜 もんだい ちょうだい!", "いっしょに あそぼう!", "きょうは なにを たべようかな", "ちょっとだけ やってみよう!"];
     return talk[Math.floor(Math.random() * talk.length)];
   }
+  /* ================= だれが あそぶ?(きょうだいで 3人まで) ================= */
+  var SLOT_ICON = ["🐣", "🐰", "🐻"];
+  function playerPick(fromHome) {
+    var list = A.profiles();
+    var cards = list.map(function (pr, i) {
+      var st = pr.s, pet = st.pets && st.pets[st.active || 0];
+      return h("button", { class: "player-card" + (pr.cur ? " on" : ""), onclick: function () {
+        A.sfx("good");
+        A.switchProfile(pr.id);
+        A.speak((st.name || "") + " だね! いっしょに がんばろう", true);
+        home();
+      } },
+        h("span", { class: "player-icon" }, SLOT_ICON[i % SLOT_ICON.length]),
+        h("span", { class: "player-name" }, st.first ? "(あたらしい ひと)" : (st.name || "なまえ なし")),
+        h("small", null, st.first ? "" : "🍙 " + (st.bag || 0) + (pet && pet.name ? "  🐾 " + pet.name : "")));
+    });
+    var add = list.length < A.MAX_PLAYERS ? h("button", { class: "btn big alt", onclick: function () {
+      A.sfx("tap"); A.addProfile(); home();
+    } }, "＋ あそぶ ひとを ふやす(" + A.MAX_PLAYERS + "人まで)") : null;
+    view(fromHome ? topbar("👤 だれが あそぶ?", home) : null,
+      h("section", { class: "welcome" },
+        fromHome ? null : h("h1", null, "だれが あそぶ?"),
+        h("button", { class: "btn small", onclick: function () { A.speak("だれが あそぶ? じぶんの なまえを おしてね。", true); } }, "🔊 よんで"),
+        h("div", { class: "player-list" }, cards),
+        add,
+        h("p", { class: "muted" }, "きょうだいで 1つの たんまつを つかう ときは、ここで かえてね。きろくは ひとりずつ べつべつだよ。")));
+    if (!fromHome && S().settings.voice) setTimeout(function () { A.speak("だれが あそぶ? じぶんの なまえを おしてね。"); }, 300);
+  }
+
+  /* ================= ホーム画面に 追加の あんない(おとな向け) ================= */
+  function isStandalone() {
+    try { return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; } catch (e) { return false; }
+  }
+  var installEvt = null;
+  try { window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); installEvt = e; }); } catch (e) {}
+  function a2hsCard() {
+    if (isStandalone()) return null;
+    var until = 0;
+    try { until = +localStorage.getItem("manatama:a2hs") || 0; } catch (e) {}
+    if (Date.now() < until) return null;
+    var ua = navigator.userAgent || "";
+    var ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+    var how = ios
+      ? "Safari の 下(または 上)の 共有ボタン [⬆️] → 「ホーム画面に追加」を おしてください。"
+      : "ブラウザの メニュー [⋮] → 「ホーム画面に追加」(または「アプリを インストール」)を おしてください。";
+    var card = h("details", { class: "a2hs" },
+      h("summary", { class: "a2hs-title" }, "📲 おとなの人へ: ホーム画面に 追加してください(タップで説明)"),
+      h("p", null, "ブラウザのまま 使うと、しばらく 開かなかった ときに 記録(なかま・ごはん)が 消えてしまう ことが あります。ホーム画面に 追加して アプリとして 開くと 消えにくく なります。"),
+      h("p", null, how),
+      installEvt ? h("button", { class: "btn good", onclick: function () { installEvt.prompt(); installEvt = null; } }, "📲 ホーム画面に 追加する") : null,
+      h("button", { class: "btn-ghost", onclick: function () {
+        try { localStorage.setItem("manatama:a2hs", String(Date.now() + 14 * 864e5)); } catch (e) {}
+        card.remove();
+      } }, "あとで(2週間 かくす)"));
+    return card;
+  }
+
   function home() {
     var s = S();
     if (s.first) return welcome();
@@ -353,8 +410,9 @@
     ["pointerup", "pointerleave", "pointercancel"].forEach(function (ev) { adultBtn.addEventListener(ev, endHold); });
 
     view(
+      a2hsCard(),
       h("header", { class: "home-head" },
-        h("div", null, h("div", { class: "hello" }, (s.name ? s.name + "、こんにちは!" : "こんにちは!")),
+        h("div", null, h("button", { class: "hello who", "aria-label": "あそぶ ひとを かえる", onclick: function () { A.sfx("tap"); playerPick(true); } }, "👤 " + (s.name ? s.name + "、こんにちは!" : "こんにちは!"), h("small", null, " ▾")),
           h("div", { class: "streak" }, "🔥 " + s.streak.n + "日つづけてる   🎟️ " + A.gacha.state().tickets + "   🍙 " + (s.bag || 0))),
         h("div", { class: "toggles" },
           h("button", { class: "btn-ghost icon", "aria-label": "みやすさ・こえの せってい", onclick: function () { A.sfx("tap"); A.settingsRoom(home); } }, "👀"),
@@ -394,6 +452,7 @@
 
   function welcome() {
     var input = h("input", { class: "name-input", maxlength: "8", placeholder: "なまえ(あとで かえられるよ)", "aria-label": "なまえ" });
+    var me = h("input", { class: "name-input", maxlength: "8", placeholder: "あなたの なまえ", "aria-label": "あなたの なまえ", value: S().name || "" });
     view(
       h("section", { class: "welcome" },
         h("div", { class: "logo" }, h("span", { class: "logo-ma" }, "まな"), h("span", { class: "logo-ta" }, "たま")),
@@ -402,10 +461,12 @@
         h("h1", null, "たまごを みつけたよ!"),
         h("p", null, "もんだいを とくと ごはんが もらえるよ。ごはんを あげると、たまごから なかまが うまれるよ!"),
         h("button", { class: "btn small", onclick: function () { A.speak("たまごを みつけたよ! もんだいを とくと ごはんが もらえるよ。ごはんを あげると、たまごから なかまが うまれるよ。なまえを つけてあげよう。", true); } }, "🔊 よんで"),
-        h("label", null, "なまえを つけてあげよう", input),
+        h("label", null, "あなたの なまえ(ニックネームで OK)", me),
+        h("label", null, "たまごに なまえを つけてあげよう", input),
         h("button", { class: "btn big good", onclick: function () {
           var p = S().pets[0];
           p.name = (input.value || "").trim().slice(0, 8);
+          S().name = (me.value || "").trim().slice(0, 8);
           S().first = false; A.save(); A.sfx("good"); A.confetti(16);
           A.gradePick(home, true);
         } }, "はじめる!"),
@@ -570,7 +631,7 @@
       var gain = Q.lastFood > 0 ? "🍙 ごはん +" + Q.lastFood + " (ふくろに ゲット!)" : "🍙 こんどは ひとりで できたら ごはんが もらえるよ";
       kids.push(h("div", { class: "feedback good" },
         h("div", { class: "fb-title" }, indep ? "🎉 ばっちり!" : "⭕ できたね!"),
-        Q.answeredBy === "type" ? h("p", { class: "typed-ans" }, "こたえ: ", h("b", null, p.answer)) : null,
+        Q.answeredBy === "type" ? h("p", { class: "typed-ans" }, Q.typedOther ? ["「", h("b", null, Q.typedOther), "」も せいかい! こたえの れい: ", h("b", null, p.answer)] : ["こたえ: ", h("b", null, p.answer)]) : null,
         h("p", null, p.explanation, " ", h("button", { class: "btn-ghost icon say", "aria-label": "よむ", onclick: function () { A.speak(p.explanation, true); } }, "🔊")),
         h("p", { class: "gain" }, gain + (Q.newCard ? "   🃏 カード ゲット!" : "")),
         indep && Q.answeredBy === "choice" && Q.km ? h("p", { class: "muted" }, "⌨️ うって こたえると ごはんが 2こ もらえるよ") : null,
@@ -625,6 +686,7 @@
       pr.last = Date.now();
       if (indep) pr.indep = true;
       Q.correct = true; Q.done = true; Q.count++; Q.answeredBy = typed ? "type" : "choice";
+      Q.typedOther = typed && !A.keypadSame(Q.km, c) ? c : null; // ちがう かきかたで 〇
       Q.fx = Q.afterTutor ? "special" : indep ? "crit" : "attack";
       var fo = S().foes || (S().foes = {}); fo[Q.foe.e.id] = (fo[Q.foe.e.id] || 0) + 1;
       Q.lastFood = foodFor(typed, indep);
@@ -677,9 +739,9 @@
     view(root);
     A.tutorStart(root, Q.p, {
       subject: Q.subject,
-      onPass: function (cid) {
-        var ev = earn(1);
-        Q.events = Q.events.concat(ev);
+      onPass: function (cid, firstTry) {
+        // 確かめ問題は 1回目で 正解した ときだけ ごはん
+        if (firstTry) Q.events = Q.events.concat(earn(1));
         Q.tutorPassed++;
         logEvent({ t: Date.now(), pid: Q.p.id, skill: Q.skill.id, subject: Q.subject, insight: cid });
         A.save();
@@ -857,6 +919,7 @@
           h("button", { class: "btn alt", onclick: function () { A.settingsRoom(adultRoom); } }, "👀 みやすさ・こえの せってい")),
         triesBlock(),
         h("p", { class: "muted" }, "学年は「どの単元の問題が出るか」だけを決めます。文字の大きさ・ふりがな・選択肢の数・読み上げは学年に関係なく、その子に合わせて変えられます。わからない問題では、前の学年の内容までボタンだけでさかのぼれます(子どもの画面には学年は表示されません)。"),
+        h("p", null, "👤 いまの プレイヤー: " + (s.name || "なまえ なし") + "(" + A.P.list.length + "人 登録 / " + A.MAX_PLAYERS + "人まで。ホームの 名前を おすと 切りかえ)"),
         h("p", null, "つづけた日数: " + s.streak.n + "日 / 使った日: " + keys.length + "日 / 正解: " + total + "もん / 前提まで戻って理解: " + insights + "回"),
         h("h3", null, "最近の学習(日ごと)"), h("table", null, recent.length ? recent : h("tr", null, h("td", null, "まだ記録がありません"))),
         h("h3", null, "単元ごと(正解/ミス・助けた回数)"),
@@ -869,13 +932,16 @@
           } }, "記録を書き出す(バックアップ)"),
           box,
           h("button", { class: "btn danger", onclick: function () {
-            if (confirm("ぜんぶの記録を消して、さいしょからにします。よろしいですか?")) { A.reset(); home(); }
-          } }, "記録を ぜんぶ消す"))));
+            if (confirm((s.name || "この プレイヤー") + " の記録を ぜんぶ消して、さいしょからにします。よろしいですか?")) { A.reset(); home(); }
+          } }, "この プレイヤーの 記録を ぜんぶ消す"),
+          A.P.list.length > 1 ? h("button", { class: "btn danger", onclick: function () {
+            if (confirm((s.name || "この プレイヤー") + " を 削除します(記録も消えます)。よろしいですか?")) { A.removeProfile(A.P.cur); playerPick(false); }
+          } }, "この プレイヤーを 削除する") : null)));
   }
 
   /* ================= 起動 ================= */
   A.start = function () {
-    try { A.applyView(); home(); } catch (e) {
+    try { A.applyView(); if (A.P.list.length > 1) playerPick(false); else home(); } catch (e) {
       app.appendChild(h("pre", { class: "err" }, "エラー: " + (e && e.message)));
     }
   };

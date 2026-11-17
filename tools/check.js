@@ -29,6 +29,13 @@ D.problems.forEach((p) => {
   });
   if (others.length && ans.length >= 2 * Math.max.apply(null, others.map((o) => o.length)) && ans.length > 6) give.push(p.id + " 答えだけ長い: " + ans);
   if (!p.explanation) errs.push(p.id + " 解説がない");
+  // まちがいの 選択肢が、じつは こたえと おなじ あたい(12/12 と 1、2/4 と 1/2 など)に なっていないか
+  const val = (t) => { t = t.replace(/\s/g, ""); let m;
+    if ((m = t.match(/^(\d+)と(\d+)\/(\d+)$/))) return +m[1] + m[2] / m[3];
+    if ((m = t.match(/^(\d+)\/(\d+)$/))) return m[1] / m[2];
+    if (/^\d+(\.\d+)?$/.test(t)) return +t; return null; };
+  const va = val(ans);
+  if (va !== null) others.forEach((o) => { const vo = val(o); if (vo !== null && Math.abs(vo - va) < 1e-9) errs.push(p.id + " まちがいの選択肢が こたえと おなじ あたい: " + o + " = " + ans); });
   const q = plain(p.question).replace(/\s/g, "");
   let m = q.match(/^(\d+(?:\.\d+)?)([＋−×÷])(\d+(?:\.\d+)?)＝\?$/);
   if (m) {

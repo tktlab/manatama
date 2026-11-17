@@ -95,7 +95,7 @@
       days: {},
       skills: {},
       log: [],
-      settings: { voice: true, sound: true, autoRead: true, rate: 1, kana: "ruby", zoom: 1, nChoice: 3, answerMode: "type", tries: 2 },
+      settings: { voice: true, sound: true, autoRead: true, rate: 1, kana: "ruby", zoom: 1, nChoice: 4, answerMode: "type", tries: 2 },
       grade: 0,
       course: {},
       ranges: [],
@@ -105,9 +105,17 @@
       first: true,
     };
   }
-  function load() {
+  /* プレイヤー(きょうだいで 1台を つかう ため 3人まで)。1人目は いままでの 保存場所を そのまま つかう */
+  var PKEY = "manatama:profiles", MAXP = 3;
+  function keyFor(id) { return id === "p1" ? KEY : KEY + ":" + id; }
+  function loadIdx() {
+    try { var o = JSON.parse(localStorage.getItem(PKEY)); if (o && o.list && o.list.length && o.list.indexOf(o.cur) >= 0) return o; } catch (e) {}
+    return { list: ["p1"], cur: "p1" };
+  }
+  function saveIdx() { try { localStorage.setItem(PKEY, JSON.stringify(A.P)); } catch (e) {} }
+  function load(key) {
     try {
-      var raw = localStorage.getItem(KEY);
+      var raw = localStorage.getItem(key);
       if (raw) {
         var o = JSON.parse(raw);
         var d = defaults();
@@ -115,16 +123,46 @@
           if (o[k] === undefined) o[k] = d[k];
         });
         Object.keys(d.settings).forEach(function (k) { if (o.settings[k] === undefined) o.settings[k] = d.settings[k]; });
+        if (!o.settings.v2) { if (o.settings.nChoice === 3) o.settings.nChoice = 4; o.settings.v2 = true; } // こたえの かず: 4つが きほんに なった
         return o;
       }
     } catch (e) {}
     return defaults();
   }
-  A.S = load();
+  A.P = loadIdx();
+  A.S = load(keyFor(A.P.cur));
   A.save = function () {
     try {
-      localStorage.setItem(KEY, JSON.stringify(A.S));
+      localStorage.setItem(keyFor(A.P.cur), JSON.stringify(A.S));
     } catch (e) {}
+  };
+  A.MAX_PLAYERS = MAXP;
+  A.profiles = function () {
+    return A.P.list.map(function (id) { return { id: id, cur: id === A.P.cur, s: id === A.P.cur ? A.S : load(keyFor(id)) }; });
+  };
+  A.switchProfile = function (id) {
+    if (A.P.list.indexOf(id) < 0) return;
+    A.save();
+    A.P.cur = id; saveIdx();
+    A.S = load(keyFor(id));
+    if (A.applyView) A.applyView();
+  };
+  A.addProfile = function () {
+    if (A.P.list.length >= MAXP) return false;
+    var id = null;
+    for (var i = 1; i <= MAXP && !id; i++) if (A.P.list.indexOf("p" + i) < 0) id = "p" + i;
+    try { localStorage.removeItem(keyFor(id)); } catch (e) {}
+    A.P.list.push(id); saveIdx();
+    A.switchProfile(id);
+    return true;
+  };
+  A.removeProfile = function (id) {
+    if (A.P.list.length <= 1) return false;
+    try { localStorage.removeItem(keyFor(id)); } catch (e) {}
+    A.P.list = A.P.list.filter(function (x) { return x !== id; });
+    if (A.P.cur === id) { A.P.cur = A.P.list[0]; A.S = load(keyFor(A.P.cur)); if (A.applyView) A.applyView(); }
+    saveIdx();
+    return true;
   };
   /* 記録がブラウザに消されにくいよう お願いし、閉じる直前にも保存する */
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}

@@ -10,6 +10,17 @@
 
   var FOUNDATION = { 算数: "s1-count", 国語: "k1-hira" };
 
+  /* 確かめ問題の プール: 説明に ついている 問題 ＋ おなじ 単元の 問題(もとの 問題は のぞく)。ランダムに 出す */
+  var poolBy = {};
+  D.problems.forEach(function (p) {
+    var cid = D.skillConcept[p.skill];
+    if (cid) (poolBy[cid] = poolBy[cid] || []).push(p);
+  });
+  function checkPool(cid, excludeId) {
+    var c = concepts[cid];
+    return (c.checks || []).concat((poolBy[cid] || []).filter(function (p) { return p.id !== excludeId; }));
+  }
+
   function pieces(c, ex, prob) {
     var n = c.examples.length || 1;
     var i = ex % n;
@@ -37,7 +48,18 @@
     var first = D.skillConcept[problem.skill] || FOUNDATION[opts.subject] || "s1-count";
     if (!concepts[first]) first = FOUNDATION[opts.subject] || "s1-count";
     var frames = [{ cid: first, piece: 0, ex: 0 }];
-    var check = null; // {variant, answer, correct, submitted, rev}
+    var check = null; // {q, choices, answer, correct, submitted}
+    var usedChecks = [];
+    function newCheck() {
+      var pool = checkPool(cur().cid, problem.id);
+      var fresh = pool.filter(function (q) { return usedChecks.indexOf(q) < 0; });
+      if (!fresh.length) fresh = pool;
+      var q = fresh[Math.floor(Math.random() * fresh.length)];
+      usedChecks.push(q);
+      var nc = Math.max(2, A.S.settings.nChoice || 4);
+      var choices = A.shuffle([q.answer].concat(A.shuffle(q.choices.filter(function (x) { return x !== q.answer; })).slice(0, nc - 1)));
+      return { q: q, choices: choices, answer: null, correct: null, submitted: false };
+    }
     var chooser = false;
     var passed = 0;
     var rev = 0;
@@ -76,7 +98,7 @@
     }
     function finishOrPop() {
       passed++;
-      if (opts.onPass) opts.onPass(cur().cid);
+      if (opts.onPass) opts.onPass(cur().cid, !cur().missed);
       if (frames.length > 1) {
         frames.pop();
         var f = cur();
@@ -129,16 +151,15 @@
       }
 
       if (check) {
-        var q = c.checks[check.variant % c.checks.length];
-        var nc = Math.max(2, A.S.settings.nChoice || 3);
-        var qc = [q.answer].concat(q.choices.filter(function (x) { return x !== q.answer; }).slice(0, nc - 1));
-        var choices = qc.slice((rev + check.variant) % qc.length).concat(qc.slice(0, (rev + check.variant) % qc.length));
+        var q = check.q, choices = check.choices;
         var cardKids = [guide(check.submitted ? (check.correct ? "せいかい! すごい!" : "おしい! だいじょうぶ、いっしょに") : "たしかめてみよう!"),
-          h("p", { class: "big-text" }, q.question, " ", h("button", { class: "btn-ghost icon say", "aria-label": "よむ", onclick: function () { A.speak(q.question + "。 " + choices.join("、 か、 "), true); } }, "🔊"))];
+          h("p", { class: "big-text" }, q.question, " ", h("button", { class: "btn-ghost icon say", "aria-label": "よむ", onclick: function () { A.speak(q.question + "。 " + choices.join("、 か、 "), true); } }, "🔊")),
+          q.visual ? A.renderVisual(q.visual) : null];
         if (!check.submitted) {
           cardKids.push(h("div", { class: "choice-col" }, choices.map(function (ch) {
             return h("button", { class: "btn big choice", onclick: function () {
               check.answer = ch; check.correct = ch === q.answer; check.submitted = true;
+              if (!check.correct) cur().missed = true; // まちがえた あとの 正解では ごはんは でない
               A.sfx(check.correct ? "ok" : "ng");
               if (check.correct) A.confetti(12);
               render();
@@ -187,9 +208,9 @@
       actions.push(h("div", { class: "nav-row" }, nav));
       if (last) {
         actions.push(h("button", { class: "btn big good", onclick: function () {
-          check = { variant: f.ex % c.checks.length, answer: null, correct: null, submitted: false };
+          check = newCheck();
           rev++; render();
-          if (A.S.settings.voice && A.S.settings.autoRead) { var q0 = c.checks[check.variant % c.checks.length]; A.speak("たしかめてみよう。 " + q0.question); }
+          if (A.S.settings.voice && A.S.settings.autoRead) A.speak("たしかめてみよう。 " + check.q.question);
         } }, "😊 わかった! たしかめる"));
       }
       if (prereqs().length) {
