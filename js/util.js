@@ -207,9 +207,16 @@
 
   /* ---------- 読み上げ ---------- */
   A.reading = function (t) {
-    return A.plain(String(t).replace(/«[^»]*»/g, " しかくで かこんだ 字 "))
+    // ふりがなが ある ところは ふりがなの ほうを よむ(「直方体」を「なおかたからだ」と よまない ため)
+    return A.plain(String(t).replace(/«[^»]*»/g, " しかくで かこんだ 字 ").replace(RUBY, function (all, base, yomi, off, str) {
+      // すうじの すぐ あとの「分・時・本・人」などは かんじの まま(「30分」を「さんじゅっぷん」と よませる)
+      if (/[0-9０-９]$/.test(str.slice(0, off)) && /^[分時本人円日月年回個度秒週万億兆倍枚匹台冊番組通等]/.test(base)) return base;
+      return yomi;
+    }))
       .replace(/□/g, " しかく ")
-      .replace(/(\d)\s*cm²/g, "$1へいほうセンチメートル")
+      .replace(/(\d)\s*cm³/g, "$1りっぽうセンチメートル").replace(/(\d)\s*m³/g, "$1りっぽうメートル")
+      .replace(/(\d)\s*cm²/g, "$1へいほうセンチメートル").replace(/(\d)\s*km²/g, "$1へいほうキロメートル").replace(/(\d)\s*m²/g, "$1へいほうメートル")
+      .replace(/(\d)\s*°/g, "$1ど")
       .replace(/(\d)\s*km/g, "$1キロメートル").replace(/(\d)\s*cm/g, "$1センチメートル").replace(/(\d)\s*mm/g, "$1ミリメートル")
       .replace(/(\d)\s*dL/g, "$1デシリットル").replace(/(\d)\s*mL/g, "$1ミリリットル").replace(/(\d)\s*L/g, "$1リットル")
       .replace(/(\d)\s*kg/g, "$1キログラム").replace(/(\d)\s*g(?![a-z])/g, "$1グラム")
