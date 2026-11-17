@@ -487,6 +487,8 @@
     Q = { review: true, reviewIds: ids, learned: 0, subject: null, focus: null, pool: null, label: "ふくしゅう", count: 0, target: ids.length, seen: {}, ok: 0, food: 0, newCards: [], helped: 0, events: [] };
     nextQuestion();
   }
+  /* おなじ たんげんの こたえ(キーボードの たんいキーを つくる ため) */
+  A.keypadSiblings = function (p) { return (probsBySkill[p.skill] || []).map(function (x) { return x.answer; }); };
   function nextQuestion() {
     if (Q.mix && Q.count > 0) { var ps = playableSubjects(); Q.mixIdx++; Q.subject = ps[Q.mixIdx % ps.length].id; }
     var sk, p;
@@ -505,12 +507,23 @@
     var wrongs = p.choices.filter(function (c) { return c !== p.answer; }).slice(0, nc - 1);
     Q.choices = A.shuffle([p.answer].concat(wrongs));
     Q.fresh = true;
-    Q.writing = false; Q.wrong = []; Q.hints = 0; Q.helped = false; Q.done = false; Q.correct = null; Q.afterTutor = false;
+    /* こたえかた: うてる もんだいは キーボードが さいしょ(みやすさで「えらぶ」を さいしょにも できる) */
+    Q.km = A.keypadMode(p, sk);
+    Q.mode = Q.km && S().settings.answerMode !== "choice" ? "type" : "choice";
+    Q.wrong = []; Q.hints = 0; Q.helped = false; Q.done = false; Q.correct = null; Q.afterTutor = false; Q.failed = false; Q.lastTyped = null;
     renderQuiz();
   }
+  /* まちがえて いい かいすう(おとなのへやで かえる。0 = なんかいでも) */
+  function tries() { var t = S().settings.tries; return t === undefined ? 2 : t; }
+  function triesLeft() { var t = tries(); return t ? Math.max(0, t - Q.wrong.length) : 99; }
   function questionSpeech() {
-    if (Q.writing) return Q.p.question;
+    if (Q.mode === "type") return Q.p.question;
     return Q.p.question + "。 こたえは、 " + Q.choices.filter(function (c) { return Q.wrong.indexOf(c) < 0; }).join("、 か、 ") + "。";
+  }
+  function foodFor(typed, clean) {
+    if (clean) return typed ? 2 : 1;          // ひとりで: うって 2こ / えらんで 1こ
+    if (Q.afterTutor) return 1;               // わからない → いっしょに まなんで できた
+    return typed ? 1 : 0;                     // まちがえた あと: えらび なおしでは もらえない
   }
   function renderQuiz() {
     var p = Q.p, sub = subjectInfo(Q.subject), pr = [];
@@ -534,49 +547,51 @@
       Q.fresh = false;
       if (S().settings.voice && S().settings.autoRead) setTimeout(function () { A.speak(questionSpeech()); }, 450);
     }
-    if (Q.writing && !Q.done) {
-      var wcard = A.write.answerCard({
-        kind: "free", text: A.plain(p.answer), shown: p.hints.slice(0, Q.hints), hints: p.hints.slice(Q.hints),
-        onHint: function () { Q.hints++; Q.helped = true; },
-        onStuck: openTutor,
-        onJudge: function (res) {
-          if (res === true) { Q.writing = false; answer(p.answer); return; }
-          if (Q.wrong.length === 0) rec(Q.skill.id).ng++;
-          Q.wrong.push("✍" + Date.now()); Q.helped = true; Q.writing = false; Q.fx = "counter"; A.sfx("ng"); A.save(); renderQuiz();
-        },
-      });
-      var wk = [head, stage, qcard];
-      if (Q.afterTutor) wk.push(h("div", { class: "note good" }, "さっき おぼえたことで もういちど ちょうせん!"));
-      wk.push(h("button", { class: "btn big choose-btn", onclick: function () { A.sfx("tap"); Q.writing = false; renderQuiz(); } }, "👆 えらんで こたえる"),
-        h("div", { class: "note good" }, "✍️ ゆびで かいても OK! かいたら こたえあわせ"), wcard);
-      view.apply(null, wk);
-      return;
+    var kids = [head];
+    if (stage) kids.push(stage);
+    if (Q.afterTutor && !Q.done) kids.push(h("div", { class: "note good" }, "さっき おぼえたことで もういちど ちょうせん!"));
+    kids.push(qcard);
+
+    var typing = Q.mode === "type" && !Q.done;
+    if (typing) {
+      kids.push(A.keypad({ mode: Q.km, say: S().settings.voice, onSubmit: function (v) { answer(v, "type"); } }));
+    } else {
+      kids.push(h("div", { class: "choice-col" }, Q.choices.map(function (c) {
+        var wrong = Q.wrong.indexOf(c) >= 0;
+        var isAns = Q.done && c === p.answer;
+        return h("div", { class: "choice-wrap" },
+          h("button", { class: "btn big choice" + (wrong ? " wrong" : "") + (isAns ? " right" : ""), disabled: wrong || Q.done ? true : null, onclick: function () { answer(c, "choice"); } }, c),
+          h("button", { class: "btn-ghost icon say", "aria-label": "この こたえを よむ", onclick: function () { if (!A.speak(c, true)) A.toast("このたんまつは こえが でないよ"); } }, "🔊"));
+      })));
     }
-    var choices = h("div", { class: "choice-col" }, Q.choices.map(function (c) {
-      var wrong = Q.wrong.indexOf(c) >= 0;
-      var isAns = Q.done && c === p.answer;
-      return h("div", { class: "choice-wrap" },
-        h("button", { class: "btn big choice" + (wrong ? " wrong" : "") + (isAns ? " right" : ""), disabled: wrong || Q.done ? true : null, onclick: function () { answer(c); } }, c),
-        h("button", { class: "btn-ghost icon say", "aria-label": "この こたえを よむ", onclick: function () { if (!A.speak(c, true)) A.toast("このたんまつは こえが でないよ"); } }, "🔊"));
-    }));
-    var kids = [head, qcard, choices];
 
-    if (Q.afterTutor && !Q.done) kids.splice(1, 0, h("div", { class: "note good" }, "さっき おぼえたことで もういちど ちょうせん!"));
-    if (stage) kids.splice(1, 0, stage);
-
-    if (Q.done) {
-      var indep = Q.correct && !Q.helped && Q.wrong.length === 0;
+    if (Q.done && Q.correct) {
+      var indep = !Q.helped && Q.wrong.length === 0;
+      var gain = Q.lastFood > 0 ? "🍙 ごはん +" + Q.lastFood + " (ふくろに ゲット!)" : "🍙 こんどは ひとりで できたら ごはんが もらえるよ";
       kids.push(h("div", { class: "feedback good" },
         h("div", { class: "fb-title" }, indep ? "🎉 ばっちり!" : "⭕ できたね!"),
+        Q.answeredBy === "type" ? h("p", { class: "typed-ans" }, "こたえ: ", h("b", null, p.answer)) : null,
         h("p", null, p.explanation, " ", h("button", { class: "btn-ghost icon say", "aria-label": "よむ", onclick: function () { A.speak(p.explanation, true); } }, "🔊")),
-        h("p", { class: "gain" }, "🍙 ごはん +" + Q.lastFood + " (ふくろに ゲット!)" + (Q.newCard ? "   🃏 カード ゲット!" : "")),
+        h("p", { class: "gain" }, gain + (Q.newCard ? "   🃏 カード ゲット!" : "")),
+        indep && Q.answeredBy === "choice" && Q.km ? h("p", { class: "muted" }, "⌨️ うって こたえると ごはんが 2こ もらえるよ") : null,
         Q.learnedNow ? h("p", { class: "gain" }, "📒 おぼえた! ふくしゅうリストから きえたよ") : null,
         h("button", { class: "btn big go", onclick: afterAnswer }, Q.count >= Q.target ? "けっかを 見る ▶" : "つぎへ ▶")));
+    } else if (Q.done && Q.failed) {
+      /* チャンスを つかいきった: こたえと わけを 見せて、ふくしゅうへ。ごはんは なし */
+      kids.push(h("div", { class: "feedback soft" },
+        h("div", { class: "fb-title" }, "こたえは「", h("b", null, p.answer), "」だったよ"),
+        h("p", null, p.explanation, " ", h("button", { class: "btn-ghost icon say", "aria-label": "よむ", onclick: function () { A.speak(p.explanation, true); } }, "🔊")),
+        h("p", { class: "gain" }, "📒 ふくしゅうリストに いれたよ。あとで もういちど やってみよう"),
+        h("div", { class: "tool-row" },
+          h("button", { class: "btn big help pulse", onclick: openTutor }, "😵 わからない(いっしょに かんがえる)"),
+          h("button", { class: "btn big go", onclick: afterAnswer }, Q.count >= Q.target ? "けっかを 見る ▶" : "つぎへ ▶"))));
     } else {
       if (Q.wrong.length) {
+        var left = triesLeft();
         kids.push(h("div", { class: "feedback soft" },
           h("div", { class: "fb-title" }, "おしい! だいじょうぶ"),
-          h("p", null, Q.wrong.length >= 2 ? "むずかしいときは「わからない」を おしてね。いっしょに もどって かんがえよう!" : "もういちど えらんでみよう。ヒントも あるよ。")));
+          Q.lastTyped != null ? h("p", null, "「" + Q.lastTyped + "」 では ないみたい。") : null,
+          h("p", null, (left < 99 ? "あと " + left + "かい ちょうせん できるよ。" : "") + (Q.wrong.length >= 2 || left <= 1 ? "むずかしいときは「わからない」を おしてね。いっしょに もどって かんがえよう!" : "ヒントも あるよ。"))));
       }
       if (Q.hints > 0) {
         kids.push(h("div", { class: "hintbox" }, p.hints.slice(0, Q.hints).map(function (t, i) {
@@ -584,20 +599,24 @@
         })));
       }
       var tools = [];
-      tools.push(h("button", { class: "btn big alt", onclick: function () { A.sfx("tap"); Q.writing = true; renderQuiz(); } }, "✍️ かいて こたえる"));
+      if (Q.km) {
+        if (Q.mode === "type") tools.push(h("button", { class: "btn big alt", onclick: function () { A.sfx("tap"); Q.mode = "choice"; Q.lastTyped = null; renderQuiz(); if (S().settings.voice && S().settings.autoRead) A.speak(questionSpeech()); } }, "👆 えらんで こたえる"));
+        else tools.push(h("button", { class: "btn big alt", onclick: function () { A.sfx("tap"); Q.mode = "type"; renderQuiz(); } }, "⌨️ うって こたえる"));
+      }
       if (Q.hints < p.hints.length) {
         tools.push(h("button", { class: "btn big alt", onclick: function () {
           Q.hints++; Q.helped = true; A.sfx("pop"); renderQuiz();
           if (S().settings.voice) A.speak(p.hints[Q.hints - 1]);
         } }, "💡 ヒント"));
       }
-      tools.push(h("button", { class: "btn big help" + (Q.wrong.length >= 2 ? " pulse" : ""), onclick: openTutor }, "😵 わからない"));
+      tools.push(h("button", { class: "btn big help" + (Q.wrong.length >= 2 || (Q.wrong.length && triesLeft() <= 1) ? " pulse" : ""), onclick: openTutor }, "😵 わからない"));
       kids.push(h("div", { class: "tool-row" }, tools));
     }
     view.apply(null, kids);
   }
-  function answer(c) {
-    var p = Q.p, ok = c === p.answer, r = rec(Q.skill.id);
+  function answer(c, how) {
+    var p = Q.p, typed = how === "type", r = rec(Q.skill.id);
+    var ok = typed ? A.keypadCheck(Q.km, c) : c === p.answer;
     var pr = r.probs[p.id] || (r.probs[p.id] = { indep: false, last: 0 });
     if (ok) {
       var indep = !Q.helped && Q.wrong.length === 0;
@@ -605,29 +624,39 @@
       r.ok++;
       pr.last = Date.now();
       if (indep) pr.indep = true;
-      Q.correct = true; Q.done = true; Q.count++;
+      Q.correct = true; Q.done = true; Q.count++; Q.answeredBy = typed ? "type" : "choice";
       Q.fx = Q.afterTutor ? "special" : indep ? "crit" : "attack";
       var fo = S().foes || (S().foes = {}); fo[Q.foe.e.id] = (fo[Q.foe.e.id] || 0) + 1;
-      Q.lastFood = indep ? 2 : 1;
+      Q.lastFood = foodFor(typed, indep);
       Q.food += Q.lastFood; if (indep) Q.ok++;
       Q.newCard = beforeStars === 0;
       if (Q.newCard) Q.newCards.push(Q.skill.id);
       touchDay(true);
-      A.gacha.onSolved();
+      if (Q.lastFood > 0) A.gacha.onSolved(); // あてずっぽうの えらび なおしは ミッションにも かぞえない
       if (indep && A.gacha.clearReview(p.id)) { Q.learnedNow = true; if (Q.review) { Q.learned++; A.gacha.onReviewSolved(); } } else Q.learnedNow = false;
-      logEvent({ t: Date.now(), pid: p.id, skill: Q.skill.id, subject: Q.subject, ok: true, help: Q.helped, wrong: Q.wrong.length });
-      Q.events = Q.events.concat(earn(Q.lastFood));
+      logEvent({ t: Date.now(), pid: p.id, skill: Q.skill.id, subject: Q.subject, ok: true, help: Q.helped, wrong: Q.wrong.length, how: Q.answeredBy });
+      if (Q.lastFood > 0) Q.events = Q.events.concat(earn(Q.lastFood));
       A.save();
       A.sfx("good"); A.confetti(indep ? 22 : 10);
       if (S().settings.voice && S().settings.autoRead) setTimeout(function () { A.speak((indep ? "ばっちり! " : "できたね! ") + p.explanation); }, 300);
     } else {
       if (Q.wrong.length === 0) r.ng++;
-      Q.wrong.push(c);
+      Q.wrong.push(typed ? "⌨" + c : c);
+      Q.lastTyped = typed ? c : null;
       A.gacha.addReview(p);
       Q.fx = "counter";
       A.sfx("ng");
-      A.save();
-      if (S().settings.voice && S().settings.autoRead) setTimeout(function () { A.speak(Q.wrong.length >= 2 ? "おしい! むずかしい ときは、わからない を おしてね。" : "おしい! もういちど えらんでみよう。"); }, 300);
+      if (tries() && Q.wrong.length >= tries()) {
+        // チャンスを つかいきった: こたえを 見せて つぎへ(ごはん なし・ふくしゅうへ)
+        Q.done = true; Q.failed = true; Q.correct = false; Q.count++;
+        touchDay(false);
+        logEvent({ t: Date.now(), pid: p.id, skill: Q.skill.id, subject: Q.subject, ok: false, help: Q.helped, wrong: Q.wrong.length, how: typed ? "type" : "choice", given: Q.wrong.map(function (w) { return String(w).replace(/^⌨/, ""); }) });
+        A.save();
+        if (S().settings.voice && S().settings.autoRead) setTimeout(function () { A.speak("こたえは、 " + p.answer + " だよ。 " + p.explanation); }, 300);
+      } else {
+        A.save();
+        if (S().settings.voice && S().settings.autoRead) setTimeout(function () { A.speak(Q.wrong.length >= 2 || triesLeft() <= 1 ? "おしい! むずかしい ときは、わからない を おしてね。" : "おしい! もういちど やってみよう。"); }, 300);
+      }
     }
     renderQuiz();
   }
@@ -656,7 +685,8 @@
         A.save();
       },
       onExit: function (res) {
-        Q.wrong = []; // 学んだあとで、もう一度ぜんぶ選べる
+        if (Q.failed) { Q.failed = false; Q.done = false; Q.correct = null; Q.count--; } // まなんだら もういちど ちょうせん
+        Q.wrong = []; Q.lastTyped = null; // 学んだあとで、もう一度ぜんぶ選べる
         Q.afterTutor = true;
         var events = Q.events; Q.events = [];
         if (res.done) A.confetti(20);
@@ -783,6 +813,17 @@
   }
 
   /* ================= おとなのへや ================= */
+  /* こたえる チャンスの かいすう(おとなが きめる) */
+  function triesBlock() {
+    var cur = tries();
+    var opts = [[1, "1回"], [2, "2回"], [3, "3回"], [0, "何回でも"]];
+    return h("section", { class: "set-row" },
+      h("div", { class: "set-title" }, "🎯 1問で こたえられる回数"),
+      h("div", { class: "set-opts" }, opts.map(function (o) {
+        return h("button", { class: "set-opt" + (cur === o[0] ? " on" : ""), onclick: function () { S().settings.tries = o[0]; A.save(); A.sfx("tap"); adultRoom(); } }, o[1]);
+      })),
+      h("p", { class: "muted" }, "回数を使いきると、答えと説明を見せて次へ進みます(ごはんは出ません。問題は「ふくしゅう」に入ります)。「わからない」から一緒に学び直すと、もう一度ちょうせんできます。ごはん: キーボードで1回目に正解=2こ / 選んで1回目に正解=1こ / まちがえた後の正解=キーボード1こ・選択0こ / わからないで学んだ後の正解=1こ。「何回でも」にすると選択肢を順に押せば正解にたどり着けますが、まちがえた後の選択での正解ではごはんもミッションも進みません。"));
+  }
   function adultRoom() {
     var s = S();
     var keys = Object.keys(s.days).sort();
@@ -802,7 +843,8 @@
       var p = D.problems.filter(function (x) { return x.id === e.pid; })[0];
       var d = new Date(e.t);
       var when = (d.getMonth() + 1) + "/" + d.getDate() + " " + d.getHours() + ":" + (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
-      var what = e.insight ? "💡 前提を理解: " + A.tutorConceptTitle(e.insight) : (e.ok ? "⭕" : "❌") + (e.help ? "(助けあり)" : "") + " " + (p ? p.question.slice(0, 22) : e.pid);
+      var how = e.how === "type" ? "⌨️" : e.how === "choice" ? "👆" : "";
+      var what = e.insight ? "💡 前提を理解: " + A.tutorConceptTitle(e.insight) : (e.ok ? "⭕" : "❌") + how + (e.help ? "(助けあり)" : "") + (e.ok && e.wrong ? "(" + e.wrong + "回まちがえてから)" : "") + " " + (p ? A.plain(p.question).slice(0, 22) : e.pid) + (e.given ? " → 答え:" + e.given.join("/") + "(正:" + (p ? A.plain(p.answer) : "?") + ")" : "");
       return h("tr", null, h("td", null, when), h("td", null, what));
     });
     var total = s.log.filter(function (e) { return e.ok; }).length;
@@ -813,6 +855,7 @@
         h("div", { class: "choice-col" },
           h("button", { class: "btn alt", onclick: function () { A.gradePick(adultRoom); } }, "🎒 がくねんを かえる(いま " + grade() + "年)"),
           h("button", { class: "btn alt", onclick: function () { A.settingsRoom(adultRoom); } }, "👀 みやすさ・こえの せってい")),
+        triesBlock(),
         h("p", { class: "muted" }, "学年は「どの単元の問題が出るか」だけを決めます。文字の大きさ・ふりがな・選択肢の数・読み上げは学年に関係なく、その子に合わせて変えられます。わからない問題では、前の学年の内容までボタンだけでさかのぼれます(子どもの画面には学年は表示されません)。"),
         h("p", null, "つづけた日数: " + s.streak.n + "日 / 使った日: " + keys.length + "日 / 正解: " + total + "もん / 前提まで戻って理解: " + insights + "回"),
         h("h3", null, "最近の学習(日ごと)"), h("table", null, recent.length ? recent : h("tr", null, h("td", null, "まだ記録がありません"))),
@@ -837,5 +880,5 @@
     }
   };
   A.core = { quickStart: quickStart, startReviewMission: startReviewMission, grade: grade, gradeSkills: gradeSkills, playableSubjects: playableSubjects, feed: earn, earn: earn, touchDay: touchDay, logEvent: logEvent, showEvents: showEvents, view: view, topbar: topbar, stars: stars, skillMap: skillMap, startMission: startMission, home: home, SUBJECTS: SUBJECTS, subjectInfo: subjectInfo, save: function () { A.save(); } };
-  A.debug = { skill: function (id) { return skillMap[id]; }, stars: stars, Q: function () { return Q; }, startMission: startMission, home: home, feed: growBy, view: view };
+  A.debug = { adult: adultRoom, skill: function (id) { return skillMap[id]; }, stars: stars, Q: function () { return Q; }, startMission: startMission, home: home, feed: growBy, view: view };
 })();

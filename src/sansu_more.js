@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   var S = M.skill, near = M.near, flow = M.flow, pics = M.pics;
-  function dec(x) { return String(Math.round(x * 1000) / 1000); }
+  function dec(x) { return String(Math.round(x * 100000) / 100000); }
 
   /* ---------- 1年 かたち ---------- */
   S({ unit: "sa1-10", sub: "算数", id: "s1-shape", name: "かたち", title: "いろいろな かたち",

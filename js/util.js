@@ -95,7 +95,7 @@
       days: {},
       skills: {},
       log: [],
-      settings: { voice: true, sound: true, autoRead: true, rate: 1, kana: "ruby", zoom: 1, nChoice: 3 },
+      settings: { voice: true, sound: true, autoRead: true, rate: 1, kana: "ruby", zoom: 1, nChoice: 3, answerMode: "type", tries: 2 },
       grade: 0,
       course: {},
       ranges: [],

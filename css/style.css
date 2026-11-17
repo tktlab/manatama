@@ -525,3 +525,35 @@ html[data-kana="kana"] .qtext, html[data-kana="kana"] .big-text { word-break: ke
 .past-grade summary small { color: var(--muted); font-weight: 700; }
 .past-grade .path { padding: 0 10px 12px; }
 .node-icon.num { font-weight: 900; font-size: 22px; color: #fff; background: var(--c, #5b8def); border-radius: 50%; width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+
+/* ---------- うって こたえる キーボード ---------- */
+.keypad { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px; margin: 12px 0; display: flex; flex-direction: column; gap: 8px; }
+.kp-top { display: flex; gap: 6px; align-items: stretch; }
+.kp-disp { flex: 1; min-height: 60px; border: 3px solid var(--blue); border-radius: 16px; padding: 8px 12px; font-size: 30px; font-weight: 800; display: flex; align-items: center; flex-wrap: wrap; word-break: break-all; background: #f6f9ff; }
+.kp-disp.kp-en { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 26px; letter-spacing: 0.02em; }
+.kp-ph { color: #a7b0cc; font-size: 16px; font-weight: 600; }
+.kp-caret { display: inline-block; width: 3px; height: 1.1em; background: var(--blue); margin-left: 2px; animation: kpblink 1s steps(1) infinite; }
+@keyframes kpblink { 50% { opacity: 0; } }
+.kp-key { border: 0; border-radius: 12px; background: #eef3ff; color: var(--ink); font-weight: 800; font-size: 24px; min-height: 52px; padding: 4px 6px; box-shadow: 0 3px 0 rgba(47, 58, 102, 0.18); }
+.kp-key:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(47, 58, 102, 0.18); }
+.kp-key.fn { background: #e3e7f3; font-size: 17px; }
+.kp-key.fn.on { background: var(--blue); color: #fff; }
+.kp-key.sym { background: #fff2dd; }
+.kp-key.tok { background: #e2f7ee; font-size: 20px; padding: 4px 12px; }
+.kp-key.blank { visibility: hidden; box-shadow: none; }
+.kp-grid.num { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.kp-grid.num .kp-key { min-height: 58px; font-size: 28px; }
+.kp-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.kp-row .kp-key { flex: 1; min-width: 0; }
+.kp-row .kp-key.wide { flex: 2.4; }
+.kp-row.toks .kp-key { flex: 0 1 auto; min-width: 64px; }
+.kp-letters { display: flex; flex-direction: column; gap: 6px; }
+.kp-letters .kp-row { flex-wrap: nowrap; gap: 4px; }
+.kp-letters .kp-key { font-size: 20px; min-height: 48px; padding: 2px 0; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+.kp-letters .kp-key.fn { font-size: 14px; }
+/* 50おんひょう: みぎから あ・か・さ… (がっこうの ひょうと おなじ ならび) */
+.kp-kana-grid { display: flex; flex-direction: row-reverse; gap: 3px; justify-content: center; }
+.kp-col { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.kp-col .kp-key { font-size: 19px; min-height: 40px; padding: 0; border-radius: 9px; }
+.kp-go { margin-top: 4px; }
+.typed-ans b { font-size: 1.2em; }
