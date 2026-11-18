@@ -583,7 +583,7 @@
   }
   function foodFor(typed, clean) {
     if (clean) return typed ? 2 : 1;          // ひとりで: うって 2こ / えらんで 1こ
-    if (Q.afterTutor) return 1;               // わからない → いっしょに まなんで できた
+    if (Q.afterTutor && Q.tutorPassed > 0) return 1; // わからない → まなんで たしかめも できた
     return typed ? 1 : 0;                     // まちがえた あと: えらび なおしでは もらえない
   }
   function renderQuiz() {
@@ -739,6 +739,7 @@
     view(root);
     A.tutorStart(root, Q.p, {
       subject: Q.subject,
+      startPiece: Q.hints, // もう 見た ヒントの つぎから
       onPass: function (cid, firstTry) {
         // 確かめ問題は 1回目で 正解した ときだけ ごはん
         if (firstTry) Q.events = Q.events.concat(earn(1));
@@ -747,9 +748,13 @@
         A.save();
       },
       onExit: function (res) {
-        if (Q.failed) { Q.failed = false; Q.done = false; Q.correct = null; Q.count--; } // まなんだら もういちど ちょうせん
-        Q.wrong = []; Q.lastTyped = null; // 学んだあとで、もう一度ぜんぶ選べる
-        Q.afterTutor = true;
+        // せつめいを 見て まなんだら、もう一度 ちょうせん できる(すぐ とじた だけでは やりなおしに ならない)
+        var learned = (res.seen || 0) >= 1 || res.passed > 0;
+        if (learned) {
+          if (Q.failed) { Q.failed = false; Q.done = false; Q.correct = null; Q.count--; }
+          Q.wrong = []; Q.lastTyped = null;
+        }
+        Q.afterTutor = learned;
         var events = Q.events; Q.events = [];
         if (res.done) A.confetti(20);
         showEvents(events, renderQuiz);

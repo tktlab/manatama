@@ -18,28 +18,29 @@
   });
   function checkPool(cid, excludeId) {
     var c = concepts[cid];
-    return (c.checks || []).concat((poolBy[cid] || []).filter(function (p) { return p.id !== excludeId; }));
+    var ex = excludeId ? D.problems.filter(function (p) { return p.id === excludeId; })[0] : null;
+    var exAns = ex ? A.plain(ex.answer) : null;
+    // もとの もんだいと おなじ こたえの 問題は 出さない(たしかめで こたえが わかって しまう ため)
+    var all = (c.checks || []).concat(poolBy[cid] || []).filter(function (p) { return p.id !== excludeId; });
+    var safe = all.filter(function (p) { return A.plain(p.answer) !== exAns; });
+    return safe.length ? safe : all;
   }
 
+  /* 説明の ならび。もとの もんだいでは「ヒント → あと ひといき(こたえの 一歩手前)→ もとに なる きほん → たとえば → ひとつずつ」と
+     だんだん やさしく、ふかく もどっていく。こたえは いきなり 言わない。 */
   function pieces(c, ex, prob) {
     var n = c.examples.length || 1;
     var i = ex % n;
-    var list = [
-      { head: "まず、ことばの いみ", text: c.meaning, visual: null },
-      { head: "ちいさな れいで 見よう", text: c.examples[i] || c.meaning, visual: c.visuals ? c.visuals[i] || c.visuals[0] : null },
-    ];
-    c.steps.forEach(function (s, k) {
-      list.push({ head: "ひとつずつ " + (k + 1), text: s, visual: c.visuals ? c.visuals[i] || c.visuals[0] : null });
-    });
-    // さいしょの説明(もとの問題の説明)では、さいごに「この もんだいでは」で その問題の とき方の ヒントを 見せる
-    if (prob && prob.hints && prob.hints[0]) list.push({ head: "この もんだいの ヒント", text: prob.hints[0], visual: prob.visual || null, quote: prob.question });
-    // さいごに、この もんだいの とき方を こたえまで いっしょに 見る(知らないと とけない 問題も、ここで わかるように)
-    if (prob && prob.explanation) {
-      var ex = prob.explanation, ans = prob.answer;
-      // 説明に こたえが 出てこない ときは、さいしょに こたえを はっきり 言う
-      if (A.plain(ex).replace(/\s/g, "").indexOf(A.plain(ans).replace(/\s/g, "")) < 0) ex = "こたえは「" + ans + "」。 " + ex;
-      list.push({ head: "こたえまで いっしょに", text: ex, visual: prob.visual || null, quote: prob.question });
+    var list = [];
+    if (prob) {
+      if (prob.hints && prob.hints[0]) list.push({ head: "まずは ヒント", text: prob.hints[0], visual: prob.visual || null, quote: prob.question });
+      if (prob.hints && prob.hints[1]) list.push({ head: "あと ひといき", text: prob.hints[1], visual: prob.visual || null, quote: prob.question });
     }
+    list.push({ head: prob ? "もとに なる きほん「" + c.title + "」" : "まず、ことばの いみ", text: c.meaning, visual: null });
+    list.push({ head: "たとえば", text: c.examples[i] || c.meaning, visual: c.visuals ? c.visuals[i] || c.visuals[0] : null });
+    c.steps.forEach(function (st, k) {
+      list.push({ head: "ひとつずつ " + (k + 1), text: st, visual: c.visuals ? c.visuals[i] || c.visuals[0] : null });
+    });
     return list;
   }
 
@@ -65,6 +66,9 @@
     var rev = 0;
 
     function cur() { return frames[frames.length - 1]; }
+    var nHints = problem && problem.hints ? Math.min(2, problem.hints.filter(Boolean).length) : 0;
+    function exPiece() { return frames.length === 1 && problem ? nHints + 1 : 1; } // 「たとえば」の ばしょ
+    if (opts.startPiece) frames[0].piece = Math.min(opts.startPiece, nHints);
     function concept() { return concepts[cur().cid]; }
 
     function prereqs() {
@@ -77,6 +81,7 @@
       if (A.S.settings.voice && A.S.settings.autoRead) A.speak(p.head + "。 " + p.text);
     }
 
+    var seen = 0; // 見た 説明の かず(すぐ とじて やりなおしを ふやせないように)
     function descend(id) {
       A.sfx("pop");
       frames.push({ cid: id, piece: 0, ex: 0 });
@@ -88,7 +93,7 @@
       if (!list.length) {
         // いちばん やさしいところ: 別の例でもう一度
         var f = cur();
-        f.ex++; f.piece = 1; check = null; rev++;
+        f.ex++; f.piece = exPiece(); check = null; rev++;
         render(true);
         return;
       }
@@ -102,16 +107,16 @@
       if (frames.length > 1) {
         frames.pop();
         var f = cur();
-        f.ex++; f.piece = 1; check = null; chooser = false; rev++;
+        f.ex++; f.piece = exPiece(); check = null; chooser = false; rev++;
         render(true);
       } else {
         A.stopSpeak();
-        opts.onExit({ done: true, passed: passed });
+        opts.onExit({ done: true, passed: passed, seen: seen });
       }
     }
     function close() {
       A.stopSpeak();
-      opts.onExit({ closed: true, passed: passed });
+      opts.onExit({ closed: true, passed: passed, seen: seen });
     }
 
     function ladder() {
@@ -174,7 +179,7 @@
             acts.push(h("button", { class: "btn big good", onclick: finishOrPop }, frames.length > 1 ? "☑ わかった! ひとつ もどる ▶" : "☑ わかった! もんだいへ ▶"));
           } else {
             acts.push(h("button", { class: "btn big", onclick: function () {
-              var ff = cur(); ff.ex++; ff.piece = 1; check = null; rev++; render(true);
+              var ff = cur(); ff.ex++; ff.piece = exPiece(); check = null; rev++; render(true);
             } }, "🔁 べつの れいで もういちど"));
             if (prereqs().length) acts.push(h("button", { class: "btn big alt", onclick: askEasier }, "🪜 もっと やさしく"));
           }
@@ -202,21 +207,32 @@
         rev++; render(true);
       } }, "◀"));
       var actions = [];
+      var easier = prereqs().length;
       if (!last) {
-        nav.push(h("button", { class: "btn big grow", onclick: function () { f.piece++; rev++; render(true); } }, "つぎ ▶"));
+        // つぎへ = もっと わかりやすく(ヒント → 一歩手前 → きほん → たとえ → ひとつずつ)
+        nav.push(h("button", { class: "btn big grow", onclick: function () { f.piece++; seen++; rev++; render(true); } }, f.piece < nHints - 1 && frames.length === 1 ? "🪜 もっと ヒント ▶" : "🪜 もっと わかりやすく ▶"));
       }
       actions.push(h("div", { class: "nav-row" }, nav));
-      if (last) {
+      if (frames.length === 1 && problem) {
+        // もとの もんだいに もどって、じぶんで やってみる(こたえは ここでは 言わない)
+        actions.push(h("button", { class: "btn big good", onclick: function () { close(); } }, "😊 わかった! もんだいで やってみる"));
+        if (last && checkPool(cur().cid, problem.id).length) actions.push(h("button", { class: "btn big", onclick: function () {
+          check = newCheck(); rev++; render();
+          if (A.S.settings.voice && A.S.settings.autoRead) A.speak("たしかめてみよう。 " + check.q.question);
+        } }, "✏️ にた もんだいで れんしゅう"));
+      } else if (last) {
         actions.push(h("button", { class: "btn big good", onclick: function () {
           check = newCheck();
           rev++; render();
           if (A.S.settings.voice && A.S.settings.autoRead) A.speak("たしかめてみよう。 " + check.q.question);
         } }, "😊 わかった! たしかめる"));
       }
-      if (prereqs().length) {
-        actions.push(h("button", { class: "btn big alt", onclick: askEasier }, "🪜 まだ むずかしい → もっと やさしく"));
+      if (last && easier) {
+        actions.push(h("button", { class: "btn big alt", onclick: function () { seen++; askEasier(); } }, "🪜 まだ むずかしい → もっと まえの きほんへ"));
+      } else if (!last && easier && f.piece >= (frames.length === 1 && problem ? nHints : 0)) {
+        actions.push(h("button", { class: "btn alt", onclick: function () { seen++; askEasier(); } }, "🪜 もっと まえの きほんへ とぶ"));
       } else if (last) {
-        actions.push(h("button", { class: "btn big alt", onclick: function () { f.ex++; f.piece = 1; rev++; render(true); } }, "🔁 べつの れいを 見る"));
+        actions.push(h("button", { class: "btn big alt", onclick: function () { f.ex++; f.piece = exPiece(); seen++; rev++; render(true); } }, "🔁 べつの たとえを 見る"));
       }
       body = h("section", { class: "card" },
         h("div", { class: "concept-title" }, c.title),

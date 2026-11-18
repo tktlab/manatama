@@ -86,7 +86,7 @@ function build(tok) {
     [/(^|[^\d}])(\d+)\{日\|にち\}/g, (m, pre, n) => pre + (n === "1" ? R("1日", "いちにち") : DAYS[+n] && +n !== 1 ? R(n + "日", DAYS[+n]) : n + R("日", "にち"))],
   ];
   const POST = [
-    [/\{色\|しょく\}/g, R("色", "いろ")], [/\{何\|なん\}\{色\|いろ\}/g, R("何", "なに") + R("色", "いろ")],
+    [/\{何\|なん\}\{月\|つき\}/g, R("何月", "なんがつ")], [/\{色\|しょく\}/g, R("色", "いろ")], [/\{何\|なん\}\{色\|いろ\}/g, R("何", "なに") + R("色", "いろ")],
     [/\{辺\|あたり\}/g, R("辺", "へん")],
     [/\{時\|とき\}¦?こく/g, R("時", "じ") + "こく"], [/\{時\|とき\}を 1/g, R("時", "じ") + "を 1"], [/\{時計\|とけい\}の \{時\|とき\}/g, R("時計", "とけい") + "の " + R("時", "じ")],
     [/\{上\|じょう\}/g, R("上", "うえ")], [/\{下\|か\}/g, R("下", "した")],
@@ -170,6 +170,70 @@ kuromoji.builder({ dicPath: path.join(path.dirname(require.resolve("kuromoji")),
   });
   const D = ctx.window.AOTO_DATA, C = ctx.window.AOTO_CURRICULUM;
   const { conv, usage } = build(tok);
+  /* ---------- ヒントで こたえを 言わない(こたえの ところを □ に する。意味が なくなる ときは にた れいに) ---------- */
+  const plainS = (t) => String(t).replace(/\{([^{}|]+)\|[^{}|]+\}/g, "$1").replace(/[¦«»]/g, "");
+  const squash = (t) => plainS(t).replace(/[\s。、．.,!！?？=＝→:：・「」()（）□]/g, "");
+  const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  function leaks(text, ans) {
+    const a = plainS(ans).replace(/\s/g, ""), t = plainS(text).replace(/\s/g, "");
+    if (!a) return false;
+    if (/^[0-9.]{1,6}$/.test(a)) return new RegExp("(^|[^0-9.])" + esc(a) + "($|[^0-9])").test(t);
+    if (/^[0-9A-Za-z.]{1,3}$/.test(a)) return new RegExp("(^|[^0-9A-Za-z.])" + esc(a) + "($|[^0-9A-Za-z])").test(t);
+    if (a.length === 1) return /[一-鿿]/.test(a) ? t.indexOf(a) >= 0 : new RegExp("「" + esc(a) + "」").test(t);
+    if (t.indexOf(a) >= 0) return true;
+    // かたかな・ひらがなの ちがいや「の/との」の ちがい だけの ときも こたえを 言っている とみなす
+    const ha = hira(a), ht = hira(t);
+    if (ha.length >= 3 && ht.indexOf(ha) >= 0) return true;
+    if (a.length >= 4) { // こたえの 半分いじょうが そのまま 入っている / みじかい ヒントが こたえと ほぼ おなじ
+      let best = 0;
+      for (let i = 0; i < a.length; i++) for (let j = i + best + 1; j <= a.length; j++) { if (t.indexOf(a.slice(i, j)) >= 0) best = j - i; else break; }
+      if (best >= Math.max(3, a.length * 0.5)) return true;
+      if (squash(text).length <= a.length * 1.6 && best >= Math.max(3, a.length * 0.35)) return true;
+    }
+    return false;
+  }
+  function maskAns(text, ans) {
+    const a = plainS(ans).trim();
+    let t = plainS(text); // ヒントは あとで ふりがなを つけなおす
+    const forms = [a, a.replace(/\s+/g, "")].filter((x, i, arr) => x && arr.indexOf(x) === i);
+    forms.forEach((f) => {
+      if (/^[0-9.]{1,6}$/.test(f)) t = t.replace(new RegExp("(^|[^0-9.])" + esc(f) + "(?=$|[^0-9])", "g"), "$1□");
+      else if (/^[0-9A-Za-z.]{1,3}$/.test(f)) t = t.replace(new RegExp("(^|[^0-9A-Za-z.])" + esc(f) + "(?=$|[^0-9A-Za-z])", "g"), "$1□");
+      else if (f.length === 1) t = /[一-鿿]/.test(f) ? t.split(f).join("□") : t.replace(new RegExp("「" + esc(f) + "」", "g"), "「□」");
+      else t = t.split(f).join("□");
+    });
+    return t;
+  }
+  const conceptOf = {}; D.concepts.forEach((c) => { conceptOf[c.id] = c; });
+  let hintFixed = 0, hintFallback = 0;
+  D.problems.forEach((p) => {
+    const c = conceptOf[D.skillConcept[p.skill]];
+    // 「«研究»の 読みは?」のような 問題では、ヒントの 中の その漢字にも ふりがなを つけない(ふりがなで こたえが わかる ため)
+    const targets = (String(p.question).match(/«([^»]+)»/g) || []).map((x) => x.slice(1, -1));
+    const wrapT = (hn) => targets.reduce((t, k) => String(t).split(k).join("«" + k + "»").replace(/««/g, "«").replace(/»»/g, "»"), hn);
+    const dropT = (hn) => targets.reduce((t, k) => String(t).split(k).join(""), plainS(hn));
+    const qs = squash(p.question);
+    const useful = (t) => { const z = squash(dropT(t)); return z.length >= 3 && qs.indexOf(squash(t)) < 0 && !leaks(t, p.answer); };
+    const fallback = (used) => {
+      const cands = [];
+      if (c) { c.examples.forEach((e) => cands.push("にた れい: " + e)); c.steps.forEach((st) => cands.push("やりかた: " + st)); }
+      return cands.find((x) => !leaks(x, p.answer) && used.indexOf(plainS(x)) < 0 && squash(x).indexOf(qs) < 0) || null;
+    };
+    const out = [];
+    p.hints.forEach((hnt, i) => {
+      if (i > 0 && plainS(hnt) === plainS(p.hints[0])) return;
+      if (!leaks(hnt, p.answer)) { out.push(hnt); return; }
+      hintFixed++;
+      const m = maskAns(hnt, p.answer);
+      if (useful(m)) { out.push(m.replace(/(^|。)\s*□。?\s*$/, "$1 さあ、こたえの □ は?")); return; }
+      const fb = fallback(out.map(plainS)); hintFallback++;
+      if (fb) out.push(fb);
+    });
+    if (!out.length) { const fb = fallback([]); out.push(fb || "もんだいを もういちど ゆっくり 読んでみよう。"); }
+    p.hints = targets.length ? out.map(wrapT) : out;
+  });
+  console.log("ヒントの こたえ かくし: " + hintFixed + " (にた れいに: " + hintFallback + ")");
+
   const deep = (o) => {
     if (typeof o === "string") return conv(o);
     if (Array.isArray(o)) return o.map(deep);
