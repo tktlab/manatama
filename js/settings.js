@@ -62,6 +62,7 @@
       row("⌨️ こたえかた", "さいしょに でる こたえかたを えらぶよ。どちらでも、もんだいの とちゅうで かえられるよ。", [["type", "うって こたえる", "キーボードで うって こたえるよ"], ["choice", "えらんで こたえる", "えらんで こたえるよ"]], "answerMode"),
       row("🔢 こたえの かず", "えらぶ こたえの かずを えらぶよ。すくないと えらびやすいよ。", [[2, "2つ"], [3, "3つ"], [4, "4つ"]], "nChoice"),
       row("🔊 こうかおん", "ピコピコ なる おとを つかうか えらぶよ", [[true, "ならす"], [false, "ならさない"]], "sound"),
+      row("🎵 BGM(おんがく)", "うしろで ながれる おんがくを ならすか えらぶよ", [[true, "ならす"], [false, "ならさない"]], "bgm", function () { if (A.bgm) A.bgm.update(); }),
       h("button", { class: "btn big alt", onclick: function () { A.gradePick(function () { A.settingsRoom(back); }); } }, "🎒 がくねん: " + (S().grade || "?") + "ねんせい(かえる)"),
       h("button", { class: "btn big go", onclick: back }, "これで OK!"));
   };

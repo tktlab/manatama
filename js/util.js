@@ -95,7 +95,7 @@
       days: {},
       skills: {},
       log: [],
-      settings: { voice: true, sound: true, autoRead: true, rate: 1, kana: "ruby", zoom: 1, nChoice: 4, answerMode: "type", tries: 2 },
+      settings: { voice: true, sound: true, bgm: true, autoRead: true, rate: 1, kana: "ruby", zoom: 1, nChoice: 4, answerMode: "type", tries: 2 },
       grade: 0,
       course: {},
       ranges: [],
@@ -146,6 +146,7 @@
     A.P.cur = id; saveIdx();
     A.S = load(keyFor(id));
     if (A.applyView) A.applyView();
+    if (A.bgm) A.bgm.update();
   };
   A.addProfile = function () {
     if (A.P.list.length >= MAXP) return false;
@@ -315,6 +316,70 @@
       return true;
     } catch (e) { return false; }
   }
+  /* ---------- BGM(うっすら ながれる オルゴールふうの 曲。WebAudio で その場で つくる。外部ファイルなし) ---------- */
+  A.bgm = (function () {
+    var BPM = 92, B = 60 / BPM, LOOK = 0.6;
+    var master = null, timer = null, nextT = 0, step = 0, running = false;
+    var nf = function (m) { return 440 * Math.pow(2, (m - 69) / 12); };
+    // 16小節(A・B)。コード: C Am F G / C Em F G / Am F C G / F G C C
+    var CH = [[48, 60, 64, 67], [45, 57, 60, 64], [41, 57, 60, 65], [43, 55, 59, 62],
+              [48, 60, 64, 67], [40, 55, 59, 64], [41, 57, 60, 65], [43, 55, 59, 62],
+              [45, 57, 60, 64], [41, 57, 60, 65], [48, 60, 64, 67], [43, 55, 59, 62],
+              [41, 57, 60, 65], [43, 55, 59, 62], [48, 60, 64, 67], [48, 60, 64, 67]];
+    // メロディ(8分音符 × 8 / 小節。0 は やすみ)
+    var MEL = [[76, 0, 79, 0, 76, 74, 72, 0], [72, 0, 76, 0, 74, 72, 69, 0], [69, 72, 77, 0, 76, 0, 74, 0], [74, 0, 71, 72, 74, 0, 0, 0],
+               [76, 0, 79, 0, 81, 79, 76, 0], [79, 0, 76, 0, 74, 0, 71, 0], [72, 74, 77, 0, 76, 74, 72, 0], [74, 0, 0, 0, 79, 0, 0, 0],
+               [81, 0, 79, 0, 76, 0, 72, 0], [77, 0, 76, 0, 74, 0, 72, 0], [76, 0, 79, 84, 83, 0, 79, 0], [74, 0, 76, 0, 79, 0, 0, 0],
+               [77, 76, 74, 0, 72, 0, 74, 0], [79, 77, 76, 0, 74, 0, 71, 0], [72, 0, 76, 0, 79, 0, 84, 0], [79, 0, 76, 0, 72, 0, 0, 0]];
+    function on() { return A.S && A.S.settings && A.S.settings.bgm !== false; }
+    function note(c, f, t, dur, type, g) {
+      var o = c.createOscillator(), e = c.createGain();
+      o.type = type; o.frequency.value = f;
+      e.gain.setValueAtTime(0.0001, t);
+      e.gain.exponentialRampToValueAtTime(g, t + 0.02);
+      e.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(e); e.connect(master);
+      o.start(t); o.stop(t + dur + 0.05);
+    }
+    function schedule() {
+      var c = ctx;
+      if (!c || !running) return;
+      // よみあげ中は 小さく する
+      var speaking = false; try { speaking = window.speechSynthesis && speechSynthesis.speaking; } catch (e) {}
+      var target = speaking ? 0.02 : 0.055;
+      master.gain.setTargetAtTime(target, c.currentTime, 0.3);
+      while (nextT < c.currentTime + LOOK) {
+        var bar = Math.floor(step / 8) % 16, k = step % 8, ch = CH[bar], t = nextT, m = MEL[bar][k];
+        if (m) note(c, nf(m), t, B * 1.6, "triangle", 0.5);                    // オルゴールの メロディ
+        if (m) note(c, nf(m + 12), t, B * 0.6, "sine", 0.12);                   // キラッと する 上の音
+        if (k === 0 || k === 4) note(c, nf(ch[0]), t, B * 1.8, "sine", 0.55);  // ベース
+        if (k % 2 === 1) note(c, nf(ch[1 + ((k >> 1) % 3)]), t, B * 0.9, "sine", 0.16); // うらの わおん
+        nextT += B / 2; step++;
+      }
+    }
+    function start() {
+      if (running || !on()) return;
+      var c = audio(); if (!c) return;
+      if (!master) { master = c.createGain(); master.gain.value = 0.0001; master.connect(c.destination); }
+      running = true; nextT = c.currentTime + 0.1;
+      master.gain.setTargetAtTime(0.055, c.currentTime, 0.8);
+      schedule(); timer = setInterval(schedule, 200);
+    }
+    function stop() {
+      running = false;
+      if (timer) { clearInterval(timer); timer = null; }
+      if (master && ctx) master.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.15);
+    }
+    function update() { if (on() && !document.hidden) start(); else stop(); }
+    // さいしょに 画面に ふれた ときに はじめる(ブラウザは 音を かってに ならせないため)
+    try {
+      document.addEventListener("pointerdown", function () { update(); }, true);
+      document.addEventListener("keydown", function () { update(); }, true);
+      document.addEventListener("visibilitychange", update);
+    } catch (e) {}
+    return { start: start, stop: stop, update: update };
+  })();
+
   A.speak = function (text, force) {
     if (!A.canSpeak()) return false;
     if (!A.S.settings.voice && !force) return false;
